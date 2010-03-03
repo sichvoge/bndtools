@@ -17,8 +17,10 @@ import name.neilbartlett.eclipse.bndtools.classpath.WorkspaceRepositoryClasspath
 import org.eclipse.jface.dialogs.IDialogConstants;
 import org.eclipse.jface.dialogs.TitleAreaDialog;
 import org.eclipse.jface.viewers.ArrayContentProvider;
+import org.eclipse.jface.viewers.IOpenListener;
 import org.eclipse.jface.viewers.ISelection;
 import org.eclipse.jface.viewers.ISelectionChangedListener;
+import org.eclipse.jface.viewers.OpenEvent;
 import org.eclipse.jface.viewers.SelectionChangedEvent;
 import org.eclipse.jface.viewers.StyledCellLabelProvider;
 import org.eclipse.jface.viewers.StyledString;
@@ -88,6 +90,14 @@ public class ExportedBundleSelectionDialog extends TitleAreaDialog {
 			public void selectionChanged(SelectionChangedEvent event) {
 				selection = viewer.getSelection();
 				updateButtons();
+			}
+		});
+		viewer.addOpenListener(new IOpenListener() {
+			public void open(OpenEvent event) {
+				selection = viewer.getSelection();
+				
+				setReturnCode(OK);
+				close();
 			}
 		});
 		
