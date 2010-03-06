@@ -12,7 +12,6 @@ package name.neilbartlett.eclipse.bndtools.classpath;
 
 import java.io.IOException;
 import java.text.MessageFormat;
-import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.Comparator;
@@ -22,17 +21,17 @@ import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.SortedMap;
-import java.util.SortedSet;
-import java.util.TreeMap;
 import java.util.TreeSet;
 import java.util.Map.Entry;
 import java.util.concurrent.atomic.AtomicReference;
 
 import name.neilbartlett.eclipse.bndtools.Plugin;
 import name.neilbartlett.eclipse.bndtools.project.BndProjectProperties;
+import name.neilbartlett.eclipse.bndtools.repos.IBundleLocation;
+import name.neilbartlett.eclipse.bndtools.repos.IBundleRepository;
+import name.neilbartlett.eclipse.bndtools.repos.RejectedCandidateLocation;
+import name.neilbartlett.eclipse.bndtools.repos.workspace.WorkspaceRepository;
 
-import org.eclipse.core.resources.IFile;
 import org.eclipse.core.resources.IProject;
 import org.eclipse.core.resources.IWorkspaceRoot;
 import org.eclipse.core.resources.ResourcesPlugin;
@@ -48,8 +47,6 @@ import org.eclipse.jdt.core.IClasspathContainer;
 import org.eclipse.jdt.core.IJavaProject;
 import org.eclipse.jdt.core.JavaCore;
 import org.eclipse.jdt.core.JavaModelException;
-
-import aQute.libg.version.Version;
 
 public class WorkspaceRepositoryClasspathContainerInitializer extends
 		ClasspathContainerInitializer {
@@ -77,14 +74,12 @@ public class WorkspaceRepositoryClasspathContainerInitializer extends
 	/** The containers that have been previously configured against the projects. <b>Map{project name -> container}</b> **/
 	private final Map<String, WorkspaceRepositoryClasspathContainer> projectContainerMap = new HashMap<String, WorkspaceRepositoryClasspathContainer>();
 	
-	/** The bundles available in the workspace. <b>Map{bsn -> Map {version->sorted path list}}</b> */
-	private final Map<String,Map<Version,SortedSet<IPath>>> workspaceBundleMap = new HashMap<String, Map<Version,SortedSet<IPath>>>();
-	
-	/** The bundles exported by each project. <b>Map{project name -> Map{bundle path -> bundle}}</b> */
-	private final Map<String, Map<IPath,ExportedBundle>> exportsMap = new HashMap<String, Map<IPath,ExportedBundle>>();
+	private final List<IBundleRepository> repositories = new LinkedList<IBundleRepository>();
 	
 	// Prevent instantiation.
 	private WorkspaceRepositoryClasspathContainerInitializer() {
+		// TODO: setup additional repositories
+		repositories.add(WorkspaceRepository.getInstance());
 	}
 	
 	@Override
@@ -99,7 +94,7 @@ public class WorkspaceRepositoryClasspathContainerInitializer extends
 			}
 			
 			List<BundleDependency> dependencies = projectProps.getBundleDependencies();
-			Map<BundleDependency, ExportedBundle> bindings = calculateBindings(project, dependencies);
+			Map<BundleDependency, IBundleLocation> bindings = calculateBindings(project, dependencies);
 			WorkspaceRepositoryClasspathContainer newContainer = new WorkspaceRepositoryClasspathContainer(containerPath, project, dependencies, bindings);
 			projectContainerMap.put(project.getProject().getName(), newContainer);
 			
@@ -107,96 +102,40 @@ public class WorkspaceRepositoryClasspathContainerInitializer extends
 			JavaCore.setClasspathContainer(containerPath, new IJavaProject[] { project }, new IClasspathContainer[] { newContainer }, null);
 		}
 	}
-	private Map<BundleDependency, ExportedBundle> calculateBindings(IJavaProject project, Collection<? extends BundleDependency> dependencies) {
-		IWorkspaceRoot root = ResourcesPlugin.getWorkspace().getRoot();
-	
+	private Map<BundleDependency, IBundleLocation> calculateBindings(IJavaProject project, Collection<? extends BundleDependency> dependencies) {
 		ClasspathProblemReporterJob markerUpdateJob = new ClasspathProblemReporterJob(project);
 		
-		Map<BundleDependency,ExportedBundle> bindings = new HashMap<BundleDependency,ExportedBundle>();
+		Map<BundleDependency,IBundleLocation> bindings = new HashMap<BundleDependency,IBundleLocation>();
 		for (BundleDependency dependency : dependencies) {
-			String symbolicName = dependency.getSymbolicName();
-			Map<Version, SortedSet<IPath>> versionToPathsMap = workspaceBundleMap.get(symbolicName);
-			if(versionToPathsMap != null) {
-				// Record all the possible matches and rank them by version
-				List<RejectedExportCandidate> rejections = new LinkedList<RejectedExportCandidate>();
-				SortedMap<Version, ExportedBundle> matches = new TreeMap<Version, ExportedBundle>();
-				for (Entry<Version,SortedSet<IPath>> entry : versionToPathsMap.entrySet()) {
-					Version entryVersion = entry.getKey();
-					SortedSet<IPath> paths = entry.getValue();
-					if(paths != null && !paths.isEmpty() && dependency.getVersionRange().includes(entryVersion)) {
-						// Iterate over the paths and pick the first one that does not give us a cycle
-						ExportedBundle selectedExport = null;
-						for (IPath path : paths) {
-							ExportedBundle export = findExport(root, path);
-							if(!checkForCycles(project.getProject().getName(), export)) {
-								selectedExport = export;
-								break;
-							} else {
-								rejections.add(new RejectedExportCandidate(export, "Possible dependency cycle", true));
-							}
-						}
-						if(selectedExport != null) {
-							matches.put(entryVersion, selectedExport);
-						}
-					}
+			TreeSet<IBundleLocation> matches = new TreeSet<IBundleLocation>(new Comparator<IBundleLocation>() {
+				// Rank by version
+				public int compare(IBundleLocation o1, IBundleLocation o2) {
+					return o1.getVersion().compareTo(o2.getVersion());
 				}
+			});
+			List<RejectedCandidateLocation> rejections = new LinkedList<RejectedCandidateLocation>();
+			
+			for (IBundleRepository repository : repositories) {
+				repository.findCandidates(project.getProject(), dependency, matches, rejections);
+				
 				// Take the lowest-version available export
 				if(!matches.isEmpty()) {
-					Version lowestVersion = matches.firstKey();
-					ExportedBundle bestExport = matches.get(lowestVersion);
-					
-					bindings.put(dependency, bestExport);
+					IBundleLocation lowestMatch = matches.first();
+					bindings.put(dependency, lowestMatch);
 				} else {
-					String message = MessageFormat.format("No available exports matching the version range \"{0}\". {1,choice,0#One candidate|1<{1} candidates} rejected.", dependency.getVersionRange(), rejections.size());
+					String message = MessageFormat.format("No available exports matching the version range \"{0}\". {1,choice,0#No candidates|1#One candidate|1<{1} candidates} rejected.", dependency.getVersionRange(), rejections.size());
 					ResolutionProblem problem = new ResolutionProblem(message, dependency);
 					problem.addRejectedCandidates(rejections);
 					
 					markerUpdateJob.addResolutionProblem(problem);
 				}
-			} else {
-				String message = MessageFormat.format("No exported bundles match symbolic name \"{0}\".", dependency.getSymbolicName());
-				ResolutionProblem problem = new ResolutionProblem(message, dependency);
-				markerUpdateJob.addResolutionProblem(problem);
 			}
 		}
 		markerUpdateJob.schedule();
+		
 		return bindings;
 	}
 
-	// Find the export so we can get its source bnd file (if any)
-	private ExportedBundle findExport(IWorkspaceRoot root, IPath path) {
-		Map<IPath, ExportedBundle> exports = exportsMap.get(path.segment(0));
-		return exports != null ? exports.get(path) : null;
-	}
-	
-	private boolean checkForCycles(String startingProject, ExportedBundle export) {
-		IPath bndPath = export.getSourceBndFilePath();
-		
-		// If no source bnd file then this cannot be part of a cycle, since it is not built by us.
-		if(bndPath == null) {
-			return false;
-		}
-		
-		// If the bndFile is the starting project, then this export would directly result in a cycle
-		if(startingProject.equals(bndPath.segment(0))) {
-			return true;
-		}
-
-		// Find the dependencies of the project exporting the bundle, and recurse
-		WorkspaceRepositoryClasspathContainer container = projectContainerMap.get(bndPath.segment(0));
-		if(container != null) {
-			for (BundleDependency transitiveDep : container.getDependencies()) {
-				ExportedBundle transitiveBinding = container.getBinding(transitiveDep);
-				if(transitiveBinding != null) {
-					if(checkForCycles(startingProject, transitiveBinding)) {
-						return true;
-					}
-				}
-			}
-		}
-		return false;
-	}
-	
 	/**
 	 * Get all the dependency bindings for the specified project
 	 * 
@@ -206,46 +145,36 @@ public class WorkspaceRepositoryClasspathContainerInitializer extends
 	 *         will not contain any entries for unbound dependencies, so they
 	 *         must be discovered by another means.
 	 */
-	public Map<BundleDependency, ExportedBundle> getBindingsForProject(IProject project) {
+	public Map<BundleDependency, IBundleLocation> getBindingsForProject(IProject project) {
 		WorkspaceRepositoryClasspathContainer container = projectContainerMap.get(project.getName());
 		if(container == null) {
 			return Collections.emptyMap();
 		}
 		return container.getAllBindings();
 	}
-	public List<ExportedBundle> getAllWorkspaceExports() {
-		List<ExportedBundle> result = new ArrayList<ExportedBundle>();
-		for(Entry<String, Map<IPath, ExportedBundle>> entry : exportsMap.entrySet()) {
-			Map<IPath, ExportedBundle> pathMap = entry.getValue();
-			for (Entry<IPath, ExportedBundle> pathEntry : pathMap.entrySet()) {
-				result.add(pathEntry.getValue());
+	
+	public IStatus bundleLocationsChanged(IProject project, List<IBundleLocation> addedLocations, List<IBundleLocation> changedLocations, List<IBundleLocation> removedLocations, IProgressMonitor monitor) {
+		Set<String> affectedProjects = new HashSet<String>();
+		
+		// Process additions
+		if(addedLocations != null) {
+			for (IBundleLocation location : addedLocations) {
+				addBundleLocation(location, affectedProjects);
 			}
 		}
-		return result;
-	}
-
-	/**
-	 * Process a set of changes to the exported bundles for a project.
-	 * 
-	 * @param project
-	 *            The project whose exported bundles may be changing.
-	 * @param deletedJarFiles
-	 *            A list of JAR files in the project, which may or may not be
-	 *            bundles that are currently exported by the project.
-	 * @param changedBundles
-	 *            A list of changed or added bundles in the project
-	 * @param monitor
-	 *            the progress monitor to use for reporting progress to the
-	 *            user. It is the caller's responsibility to call done() on the
-	 *            given monitor. Accepts null, indicating that no progress
-	 *            should be reported and that the operation cannot be cancelled.
-	 * @return
-	 */
-	public IStatus bundlesChanged(IProject project, List<IFile> deletedJarFiles, List<ExportedBundle> changedBundles, IProgressMonitor monitor) {
-		Set<String> affectedProjects = new HashSet<String>();
-
-		processDeletedJarFiles(project, deletedJarFiles, affectedProjects);
-		processChangedBundles(project, changedBundles, affectedProjects);
+		// Process changes
+		if(changedLocations != null) {
+			for (IBundleLocation location : changedLocations) {
+				removeBundleLocation(location, affectedProjects);
+				addBundleLocation(location, affectedProjects);
+			}
+		}
+		// Process removals
+		if(removedLocations != null) {
+			for (IBundleLocation location : removedLocations) {
+				removeBundleLocation(location, affectedProjects);
+			}
+		}
 		
 		if(!affectedProjects.isEmpty())
 			return updateClasspathContainers(affectedProjects, monitor);
@@ -253,30 +182,29 @@ public class WorkspaceRepositoryClasspathContainerInitializer extends
 		return Status.OK_STATUS;
 	}
 	
-	/**
-	 * Set or reset the exports for the specified project.
-	 * 
-	 * @param project
-	 *            The project whose exported bundles are being reset.
-	 * @param bundles
-	 *            A list of changed or added bundles in the project
-	 * @param monitor
-	 *            the progress monitor to use for reporting progress to the
-	 *            user. It is the caller's responsibility to call done() on the
-	 *            given monitor. Accepts null, indicating that no progress
-	 *            should be reported and that the operation cannot be cancelled.
-	 * @return The status of the operation.
-	 */
-	public IStatus resetProjectExports(IProject project, List<ExportedBundle> bundles, IProgressMonitor monitor) {
-		Set<String> affectedProjects = new HashSet<String>();
-
-		removeAllExports(project, affectedProjects);
-		processChangedBundles(project, bundles, affectedProjects);
-		
-		if(!affectedProjects.isEmpty())
-			return updateClasspathContainers(affectedProjects, monitor);
-		
-		return Status.OK_STATUS;
+	void addBundleLocation(IBundleLocation location, Collection<String> affectedProjects) {
+		for (Entry<String, WorkspaceRepositoryClasspathContainer> projectEntry: projectContainerMap.entrySet()) {
+			String projectName = projectEntry.getKey();
+			WorkspaceRepositoryClasspathContainer container = projectEntry.getValue();
+			for (BundleDependency dependency : container.getDependencies()) {
+				if(dependency.getSymbolicName().equals(location.getSymbolicName()) && dependency.getVersionRange().includes(location.getVersion())) {
+					// Interesting if not already bound to an equal or higher version
+					IBundleLocation boundLocation = container.getBinding(dependency);
+					if(boundLocation == null || boundLocation.getVersion().compareTo(location.getVersion()) >= 0) {
+						affectedProjects.add(projectName);
+						break;
+					}
+				}
+			}
+		}
+	}
+	void removeBundleLocation(IBundleLocation location, Collection<String> affectedProjects) {
+		for (Entry<String, WorkspaceRepositoryClasspathContainer> entry : projectContainerMap.entrySet()) {
+			String projectName = entry.getKey();
+			if(entry.getValue().isBoundToPath(location.getPath())) {
+				affectedProjects.add(projectName);
+			}
+		}
 	}
 
 	// Fix the classpath containers for the affected projects
@@ -291,7 +219,7 @@ public class WorkspaceRepositoryClasspathContainerInitializer extends
 			
 			WorkspaceRepositoryClasspathContainer oldContainer = projectContainerMap.get(projectName);
 			Collection<BundleDependency> dependencies = oldContainer.getDependencies();
-			Map<BundleDependency, ExportedBundle> newBindings = calculateBindings(javaProject, dependencies);
+			Map<BundleDependency, IBundleLocation> newBindings = calculateBindings(javaProject, dependencies);
 			
 			WorkspaceRepositoryClasspathContainer newContainer = new WorkspaceRepositoryClasspathContainer(oldContainer.getPath(), oldContainer.getJavaProject(), dependencies, newBindings);
 			projectContainerMap.put(projectName, newContainer);
@@ -305,57 +233,7 @@ public class WorkspaceRepositoryClasspathContainerInitializer extends
 		
 		return status;
 	}
-	private void removeAllExports(IProject project, Collection<? super String> affectedProjects) {
-		Map<IPath, ExportedBundle> exportedBundles = exportsMap.remove(project.getName());
-		if(exportedBundles != null) {
-			for (Entry<IPath, ExportedBundle> entry : exportedBundles.entrySet()) {
-				Set<String> projects = removeBundle(entry.getValue());
-				if(projects != null) {
-					affectedProjects.addAll(projects);
-				}
-			}
-		}
-	}
-	private void processDeletedJarFiles(IProject project, List<IFile> deletedJarFiles, Collection<? super String> affectedProjects) {
-		Map<IPath, ExportedBundle> exportedBundles = exportsMap.get(project.getName());
-		if(deletedJarFiles != null) {
-			for (IFile deletedJarFile : deletedJarFiles) {
-				if(exportedBundles != null) {
-					ExportedBundle removedBundle = exportedBundles.remove(deletedJarFile.getFullPath());
-					if(removedBundle != null) {
-						Set<String> projects = removeBundle(removedBundle);
-						if(projects != null) {
-							affectedProjects.addAll(projects);
-						}
-					}
-					if(exportedBundles.isEmpty()) {
-						exportsMap.remove(project.getName());
-					}
-				}
-			}
-		}
-	}
-	private void processChangedBundles(IProject project, List<ExportedBundle> changedBundles, Collection<? super String> affectedProjects) {
-		Map<IPath, ExportedBundle> exportedBundles = exportsMap.get(project.getName());
-		if(changedBundles != null && !changedBundles.isEmpty()) {
-			if(exportedBundles == null) {
-				exportedBundles = new HashMap<IPath, ExportedBundle>();
-				exportsMap.put(project.getName(), exportedBundles);
-			}
-			for(ExportedBundle changedBundle : changedBundles) {
-				ExportedBundle priorEntry = exportedBundles.put(changedBundle.getPath(), changedBundle);
-				if(priorEntry == null) {
-					affectedProjects.addAll(addBundle(changedBundle));
-				} else {
-					if(!priorEntry.getSymbolicName().equals(changedBundle.getSymbolicName()) || !priorEntry.getVersion().equals(changedBundle.getVersion())) {
-						affectedProjects.addAll(removeBundle(priorEntry));
-						affectedProjects.addAll(addBundle(changedBundle));
-					}
-				}
-			}
-		}
-	}
-	
+
 	/**
 	 * Add the bundle to the workspace
 	 * 
@@ -364,6 +242,7 @@ public class WorkspaceRepositoryClasspathContainerInitializer extends
 	 * @return The set of projects that may be affected by this addition, e.g.
 	 *         they should import the new bundle.
 	 */
+	/* TODO: remove
 	private Set<String> addBundle(ExportedBundle bundle) {
 		// Add to the workspace bundles
 		Map<Version, SortedSet<IPath>> versionMap = workspaceBundleMap.get(bundle.getSymbolicName());
@@ -400,40 +279,5 @@ public class WorkspaceRepositoryClasspathContainerInitializer extends
 		}
 		return affectedProjects;
 	}
-	/**
-	 * Remove the exported bundle from the workspace.
-	 * 
-	 * @param bundle
-	 *            The bundle that is being removed.
-	 * @return The set of projects that will be affected by this removal, i.e.
-	 *         because they import the bundle.
-	 */
-	private Set<String> removeBundle(ExportedBundle bundle) {
-		// Update the workspace bundles
-		final Map<Version, SortedSet<IPath>> versionMap = workspaceBundleMap.get(bundle.getSymbolicName());
-		if(versionMap != null) {
-			SortedSet<IPath> paths = versionMap.get(bundle.getVersion());
-			if(paths != null) {
-				paths.remove(bundle.getPath());
-				if(paths.isEmpty()) {
-					versionMap.remove(bundle.getVersion());
-					if(versionMap.isEmpty()) {
-						workspaceBundleMap.remove(bundle.getSymbolicName());
-					}
-				}
-			}
-		}
-		
-		// Work out which projects are affected
-		Set<String> affectedProjects = new HashSet<String>();
-		for (Entry<String, WorkspaceRepositoryClasspathContainer> projectEntry: projectContainerMap.entrySet()) {
-			String projectName = projectEntry.getKey();
-			WorkspaceRepositoryClasspathContainer container = projectEntry.getValue();
-			if(container.isBoundToPath(bundle.getPath())) {
-				affectedProjects.add(projectName);
-			}
-		}
-		
-		return affectedProjects;
-	}
+	*/
 }

@@ -14,10 +14,12 @@ import java.util.Collection;
 import java.util.LinkedList;
 import java.util.List;
 
+import name.neilbartlett.eclipse.bndtools.repos.RejectedCandidateLocation;
+
 class ResolutionProblem {
 	private final BundleDependency dependency;
 	private final String message;
-	private final List<RejectedExportCandidate> rejectedCandidates = new LinkedList<RejectedExportCandidate>();
+	private final List<RejectedCandidateLocation> rejectedCandidates = new LinkedList<RejectedCandidateLocation>();
 	
 	public ResolutionProblem(String message, BundleDependency dependency) {
 		this.message = message;
@@ -30,34 +32,14 @@ class ResolutionProblem {
 	public String getMessage() {
 		return message;
 	}
-	public List<RejectedExportCandidate> getRejectedCandidates() {
+	public List<RejectedCandidateLocation> getRejectedCandidates() {
 		return rejectedCandidates;
 	}
-	public void addRejectedCandidate(RejectedExportCandidate candidate) {
+	public void addRejectedCandidate(RejectedCandidateLocation candidate) {
 		rejectedCandidates.add(candidate);
 	}
-	public void addRejectedCandidates(Collection<? extends RejectedExportCandidate> rejections) {
+	public void addRejectedCandidates(Collection<? extends RejectedCandidateLocation> rejections) {
 		rejectedCandidates.addAll(rejections);
 	}
 }
 
-class RejectedExportCandidate {
-	private final ExportedBundle export;
-	private final String reason;
-	private final boolean cycle;
-
-	public RejectedExportCandidate(ExportedBundle export, String reason, boolean cycle) {
-		this.export = export;
-		this.reason = reason;
-		this.cycle = cycle;
-	}
-	public ExportedBundle getExportCandidate() {
-		return export;
-	}
-	public String getReason() {
-		return reason;
-	}
-	public boolean isCycle() {
-		return cycle;
-	}
-}

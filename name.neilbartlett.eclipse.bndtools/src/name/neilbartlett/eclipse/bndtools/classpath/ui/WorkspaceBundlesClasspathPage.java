@@ -17,9 +17,9 @@ import java.util.List;
 import java.util.Map;
 
 import name.neilbartlett.eclipse.bndtools.classpath.BundleDependency;
-import name.neilbartlett.eclipse.bndtools.classpath.ExportedBundle;
 import name.neilbartlett.eclipse.bndtools.classpath.WorkspaceRepositoryClasspathContainerInitializer;
 import name.neilbartlett.eclipse.bndtools.project.BndProjectProperties;
+import name.neilbartlett.eclipse.bndtools.repos.IBundleLocation;
 
 import org.eclipse.core.runtime.CoreException;
 import org.eclipse.jdt.core.IClasspathEntry;
@@ -64,7 +64,7 @@ public class WorkspaceBundlesClasspathPage extends WizardPage implements IClassp
 	private IJavaProject project;
 	private BndProjectProperties projectProperties;
 	private List<BundleDependency> dependencies = null;
-	private Map<BundleDependency, ExportedBundle> bindings;
+	private Map<BundleDependency, IBundleLocation> bindings;
 
 	public WorkspaceBundlesClasspathPage() {
 		super("workspaceBundlesClasspathPath");
@@ -272,13 +272,13 @@ public class WorkspaceBundlesClasspathPage extends WizardPage implements IClassp
 	void doAdd() {
 		List<BundleDependency> adding = new ArrayList<BundleDependency>();
 
-		ExportedBundleSelectionDialog selectionDlg = new ExportedBundleSelectionDialog(getShell());
+		RepositoryBundleSelectionDialog selectionDlg = new RepositoryBundleSelectionDialog(getShell());
 		if(selectionDlg.open() == Window.OK) {
 			IStructuredSelection selection = (IStructuredSelection) selectionDlg.getSelection();
 			Iterator<?> iter = selection.iterator();
 			while(iter.hasNext()) {
-				ExportedBundle export = (ExportedBundle) iter.next();
-				adding.add(new BundleDependency(export.getSymbolicName(), new VersionRange(export.getVersion().toString())));
+				IBundleLocation location = (IBundleLocation) iter.next();
+				adding.add(new BundleDependency(location.getSymbolicName(), new VersionRange(location.getVersion().toString())));
 			}
 		}
 		if(!adding.isEmpty()) {
@@ -317,7 +317,7 @@ public class WorkspaceBundlesClasspathPage extends WizardPage implements IClassp
 		@Override
 		public void update(ViewerCell cell) {
 			BundleDependency dependency = (BundleDependency) cell.getElement();
-			ExportedBundle bundle = bindings.get(dependency);
+			IBundleLocation bundle = bindings.get(dependency);
 			
 			if(cell.getColumnIndex() == 0) {
 				String name = dependency.getSymbolicName();

@@ -8,7 +8,7 @@
  * Contributors:
  *     Neil Bartlett - initial API and implementation
  ******************************************************************************/
-package name.neilbartlett.eclipse.bndtools.classpath;
+package name.neilbartlett.eclipse.bndtools.repos.workspace;
 
 import org.eclipse.core.runtime.IPath;
 

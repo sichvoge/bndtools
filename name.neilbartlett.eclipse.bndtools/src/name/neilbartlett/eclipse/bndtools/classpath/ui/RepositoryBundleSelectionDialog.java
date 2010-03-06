@@ -11,8 +11,8 @@
 package name.neilbartlett.eclipse.bndtools.classpath.ui;
 
 import name.neilbartlett.eclipse.bndtools.Plugin;
-import name.neilbartlett.eclipse.bndtools.classpath.ExportedBundle;
-import name.neilbartlett.eclipse.bndtools.classpath.WorkspaceRepositoryClasspathContainerInitializer;
+import name.neilbartlett.eclipse.bndtools.repos.IBundleLocation;
+import name.neilbartlett.eclipse.bndtools.repos.workspace.WorkspaceRepository;
 
 import org.eclipse.jface.dialogs.IDialogConstants;
 import org.eclipse.jface.dialogs.TitleAreaDialog;
@@ -44,12 +44,12 @@ import org.eclipse.swt.widgets.TableColumn;
 import org.eclipse.swt.widgets.Text;
 import org.eclipse.ui.plugin.AbstractUIPlugin;
 
-public class ExportedBundleSelectionDialog extends TitleAreaDialog {
+public class RepositoryBundleSelectionDialog extends TitleAreaDialog {
 
 	private TableViewer viewer;
 	private ISelection selection;
 
-	public ExportedBundleSelectionDialog(Shell parentShell) {
+	public RepositoryBundleSelectionDialog(Shell parentShell) {
 		super(parentShell);
 	}
 
@@ -73,16 +73,16 @@ public class ExportedBundleSelectionDialog extends TitleAreaDialog {
 		
 		viewer = new TableViewer(table);
 		viewer.setContentProvider(new ArrayContentProvider());
-		viewer.setLabelProvider(new ExportedBundleLabelProvider());
-		viewer.setInput(WorkspaceRepositoryClasspathContainerInitializer.getInstance().getAllWorkspaceExports());
+		viewer.setLabelProvider(new BundleLocationLabelProvider());
+		viewer.setInput(WorkspaceRepository.getInstance().getAllBundles());
 		
 		viewer.setSorter(new ViewerSorter() {
 			@Override
 			public int compare(Viewer viewer, Object e1, Object e2) {
-				ExportedBundle export1 = (ExportedBundle) e1;
-				ExportedBundle export2 = (ExportedBundle) e2;
+				IBundleLocation loc1 = (IBundleLocation) e1;
+				IBundleLocation loc2 = (IBundleLocation) e2;
 				
-				return export1.compareTo(export2);
+				return loc1.compareTo(loc2);
 			}
 		});
 		
@@ -107,8 +107,8 @@ public class ExportedBundleSelectionDialog extends TitleAreaDialog {
 				if(filterStr.length() > 0) {
 					ViewerFilter filter = new ViewerFilter() {
 						public boolean select(Viewer viewer, Object parentElement, Object element) {
-							ExportedBundle export = (ExportedBundle) element;
-							return export.getSymbolicName().toLowerCase().indexOf(filterStr) > -1;
+							IBundleLocation location = (IBundleLocation) element;
+							return location.getSymbolicName().toLowerCase().indexOf(filterStr) > -1;
 						}
 					};
 					viewer.setFilters(new ViewerFilter[] { filter });
@@ -152,19 +152,19 @@ public class ExportedBundleSelectionDialog extends TitleAreaDialog {
 		return selection;
 	}
 }
-class ExportedBundleLabelProvider extends StyledCellLabelProvider {
+class BundleLocationLabelProvider extends StyledCellLabelProvider {
 	
 	Image bundleImg = AbstractUIPlugin.imageDescriptorFromPlugin(Plugin.PLUGIN_ID, "/icons/brick.png").createImage();
 	
 	@Override
 	public void update(ViewerCell cell) {
-		ExportedBundle export = (ExportedBundle) cell.getElement();
+		IBundleLocation location = (IBundleLocation) cell.getElement();
 		StyledString styledString = null;
 		if(cell.getColumnIndex() == 0) {
-			styledString = getStyledBundleId(export);
+			styledString = getStyledBundleId(location);
 			//cell.setImage(bundleImg);
 		} else if(cell.getColumnIndex() == 1) {
-			styledString = getStyledLocation(export);
+			styledString = getStyledLocation(location);
 		}
 		
 		if(styledString != null) {
@@ -172,13 +172,13 @@ class ExportedBundleLabelProvider extends StyledCellLabelProvider {
 			cell.setStyleRanges(styledString.getStyleRanges());
 		}
 	}
-	private StyledString getStyledBundleId(ExportedBundle export) {
-		StyledString styledString = new StyledString(export.getSymbolicName());
-		styledString.append("; " + export.getVersion(), StyledString.COUNTER_STYLER);
+	private StyledString getStyledBundleId(IBundleLocation location) {
+		StyledString styledString = new StyledString(location.getSymbolicName());
+		styledString.append("; " + location.getVersion(), StyledString.COUNTER_STYLER);
 		return styledString;
 	}
-	private StyledString getStyledLocation(ExportedBundle export) {
-		return new StyledString(export.getPath().makeRelative().toString(), StyledString.DECORATIONS_STYLER);
+	private StyledString getStyledLocation(IBundleLocation location) {
+		return new StyledString(location.getPath().makeRelative().toString(), StyledString.DECORATIONS_STYLER);
 	}
 	@Override
 	public void dispose() {

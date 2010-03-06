@@ -28,9 +28,10 @@ import java.util.jar.Manifest;
 
 import name.neilbartlett.eclipse.bndtools.BndProject;
 import name.neilbartlett.eclipse.bndtools.Plugin;
-import name.neilbartlett.eclipse.bndtools.classpath.ExportedBundle;
 import name.neilbartlett.eclipse.bndtools.classpath.WorkspaceRepositoryClasspathContainerInitializer;
 import name.neilbartlett.eclipse.bndtools.project.BndProjectProperties;
+import name.neilbartlett.eclipse.bndtools.repos.workspace.ExportedBundle;
+import name.neilbartlett.eclipse.bndtools.repos.workspace.WorkspaceRepository;
 import name.neilbartlett.eclipse.bndtools.utils.BndFileClasspathCalculator;
 import name.neilbartlett.eclipse.bndtools.utils.IClasspathCalculator;
 import name.neilbartlett.eclipse.bndtools.utils.PathUtils;
@@ -126,8 +127,8 @@ public class BndIncrementalBuilder extends IncrementalProjectBuilder {
 			rebuildBndFile(bndProject, file, null, bundleFiles, progress.newChild(1));
 		}
 		
-		// Notify the workspace repository that some exports may have changed.
-		WorkspaceRepositoryClasspathContainerInitializer.getInstance().resetProjectExports(bndProject.getProject(), bundleFiles, progress.newChild(1));
+		// Notify the workspace repository that some/all exports may have changed.
+		WorkspaceRepository.getInstance().resetProjectExports(bndProject.getProject(), bundleFiles, progress.newChild(1));
 	}
 	protected void incrementalBuild(BndProject bndProject, IResourceDelta delta, IProgressMonitor monitor) throws CoreException {
 		SubMonitor progress = SubMonitor.convert(monitor);
@@ -187,17 +188,17 @@ public class BndIncrementalBuilder extends IncrementalProjectBuilder {
 		}
 
 		// Inform the workspace repository about changed bundle files
-		WorkspaceRepositoryClasspathContainerInitializer classpathInitializer = WorkspaceRepositoryClasspathContainerInitializer.getInstance();
+		WorkspaceRepository repository = WorkspaceRepository.getInstance();
 		if(bndPropertiesDelta == null) {
-			classpathInitializer.bundlesChanged(bndProject.getProject(), deletedJarFiles, changedBundles, progress.newChild(1));
+			repository.bundlesChanged(bndProject.getProject(), deletedJarFiles, changedBundles, progress.newChild(1));
 		} else {
-			classpathInitializer.resetProjectExports(bndProject.getProject(), changedBundles, progress.newChild(1));
+			repository.resetProjectExports(bndProject.getProject(), changedBundles, progress.newChild(1));
 			
 			// Update the workspace repository classpath container
 			IJavaProject javaProject = JavaCore.create(getProject());
 			IPath containerPath = getWorkspaceRepositoryClasspathContainerPath(javaProject);
 			if(containerPath != null) {
-				classpathInitializer.initialize(containerPath, javaProject);
+				WorkspaceRepositoryClasspathContainerInitializer.getInstance().initialize(containerPath, javaProject);
 			}
 		}
 	}

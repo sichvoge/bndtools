@@ -16,6 +16,8 @@ import java.util.Iterator;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicReference;
 
+import name.neilbartlett.eclipse.bndtools.repos.IBundleLocation;
+
 import org.eclipse.core.resources.IResource;
 import org.eclipse.core.resources.IWorkspaceRoot;
 import org.eclipse.core.resources.ResourcesPlugin;
@@ -31,11 +33,11 @@ class WorkspaceRepositoryClasspathContainer implements
 	private final IPath containerPath;
 	private final IJavaProject javaProject;
 	private final Collection<BundleDependency> dependencies;
-	private final Map<BundleDependency, ExportedBundle> bindings;
+	private final Map<BundleDependency, IBundleLocation> bindings;
 
 	private AtomicReference<IClasspathEntry[]> entriesRef = new AtomicReference<IClasspathEntry[]>(null);
 
-	WorkspaceRepositoryClasspathContainer(IPath containerPath, IJavaProject javaProject, Collection<BundleDependency> dependencies, Map<BundleDependency,ExportedBundle> bindings) {
+	WorkspaceRepositoryClasspathContainer(IPath containerPath, IJavaProject javaProject, Collection<BundleDependency> dependencies, Map<BundleDependency,IBundleLocation> bindings) {
 		this.containerPath = containerPath;
 		this.javaProject = javaProject;
 		this.dependencies = dependencies;
@@ -49,10 +51,10 @@ class WorkspaceRepositoryClasspathContainer implements
 		
 		result = new IClasspathEntry[bindings.size()];
 		int i = 0;
-		for(Iterator<ExportedBundle> iter = bindings.values().iterator(); iter.hasNext(); i++) {
-			ExportedBundle bundle = iter.next();
+		for(Iterator<IBundleLocation> iter = bindings.values().iterator(); iter.hasNext(); i++) {
+			IBundleLocation location = iter.next();
 			
-			IPath bndFilePath = bundle.getSourceBndFilePath();
+			IPath bndFilePath = location.getSourcePath();
 			IPath srcProjectPath = null;
 			if(bndFilePath != null) {
 				IResource bndFile = root.findMember(bndFilePath);
@@ -61,7 +63,7 @@ class WorkspaceRepositoryClasspathContainer implements
 				}
 			}
 			
-			result[i] = JavaCore.newLibraryEntry(bundle.getPath(), srcProjectPath, null, false);
+			result[i] = JavaCore.newLibraryEntry(location.getPath(), srcProjectPath, null, false);
 		}
 		entriesRef.compareAndSet(null, result);
 		return entriesRef.get();
@@ -78,15 +80,15 @@ class WorkspaceRepositoryClasspathContainer implements
 	public Collection<BundleDependency> getDependencies() {
 		return Collections.unmodifiableCollection(dependencies);
 	}
-	public ExportedBundle getBinding(BundleDependency dependency) {
+	public IBundleLocation getBinding(BundleDependency dependency) {
 		return bindings.get(dependency);
 	}
-	public Map<BundleDependency, ExportedBundle> getAllBindings() {
+	public Map<BundleDependency, IBundleLocation> getAllBindings() {
 		return Collections.unmodifiableMap(bindings);
 	}
 	public boolean isBoundToPath(IPath path) {
-		for (ExportedBundle bundle : bindings.values()) {
-			if(bundle.getPath().equals(path)) {
+		for (IBundleLocation location : bindings.values()) {
+			if(location.getPath().equals(path)) {
 				return true;
 			}
 		}

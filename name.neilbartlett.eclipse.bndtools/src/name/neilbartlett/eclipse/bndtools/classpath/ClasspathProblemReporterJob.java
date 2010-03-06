@@ -15,6 +15,7 @@ import java.util.List;
 
 import name.neilbartlett.eclipse.bndtools.Plugin;
 import name.neilbartlett.eclipse.bndtools.builder.BndIncrementalBuilder;
+import name.neilbartlett.eclipse.bndtools.repos.RejectedCandidateLocation;
 
 import org.eclipse.core.resources.IMarker;
 import org.eclipse.core.resources.IProject;
@@ -65,7 +66,6 @@ class ClasspathProblemReporterJob extends WorkspaceJob {
 	}
 
 	void createMissingDependencyMarker(ResolutionProblem problem) throws CoreException {
-		BundleDependency dependency = problem.getDependency();
 		StringBuilder messageBuilder = new StringBuilder();
 		
 		messageBuilder.append("Could not resolve bundle: ");
@@ -73,9 +73,9 @@ class ClasspathProblemReporterJob extends WorkspaceJob {
 		
 		boolean cycle = false;
 		
-		List<RejectedExportCandidate> candidates = problem.getRejectedCandidates();
-		for (RejectedExportCandidate candidate : candidates) {
-			messageBuilder.append("\nRejected: ").append(candidate.getExportCandidate().getPath());
+		List<RejectedCandidateLocation> candidates = problem.getRejectedCandidates();
+		for (RejectedCandidateLocation candidate : candidates) {
+			messageBuilder.append("\nRejected: ").append(candidate.getLocation().getPath());
 			messageBuilder.append(", Reason: ").append(candidate.getReason());
 			cycle |= candidate.isCycle();
 		}
