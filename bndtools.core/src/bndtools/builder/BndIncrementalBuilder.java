@@ -38,6 +38,7 @@ import org.eclipse.core.runtime.CoreException;
 import org.eclipse.core.runtime.IPath;
 import org.eclipse.core.runtime.IProgressMonitor;
 import org.eclipse.core.runtime.IStatus;
+import org.eclipse.core.runtime.OperationCanceledException;
 import org.eclipse.core.runtime.Path;
 import org.eclipse.core.runtime.Status;
 import org.eclipse.core.runtime.SubMonitor;
@@ -72,20 +73,33 @@ public class BndIncrementalBuilder extends IncrementalProjectBuilder {
 			throws CoreException {
 
         IProject project = getProject();
-
-		ensureBndBndExists(project);
-
-		if (getLastBuildTime(project) == -1 || kind == FULL_BUILD) {
-			rebuildBndProject(project, monitor);
-		} else {
-			IResourceDelta delta = getDelta(project);
-			if(delta == null)
-				rebuildBndProject(project, monitor);
-			else
-				incrementalRebuild(delta, project, monitor);
-		}
-		setLastBuildTime(project, System.currentTimeMillis());
-		RepositoryIndexerJob.runIfNeeded();
+        
+        try {
+            if (monitor != null)
+                monitor.beginTask("Building " + project.getName() + "...", 2);
+            
+    		ensureBndBndExists(project);
+    
+    		if (getLastBuildTime(project) == -1 || kind == FULL_BUILD) {
+    			rebuildBndProject(project, monitor);
+    		} else {
+    			IResourceDelta delta = getDelta(project);
+    			if(delta == null)
+    				rebuildBndProject(project, monitor);
+    			else
+    				incrementalRebuild(delta, project, monitor);
+    		}
+    		setLastBuildTime(project, System.currentTimeMillis());
+    		
+    		checkCancel(monitor);
+    		if (monitor != null)
+    		    monitor.worked(1);
+    		
+    		RepositoryIndexerJob.runIfNeeded();
+        } finally {
+            if (monitor != null) 
+                monitor.done();
+        }
 		return new IProject[]{ project.getWorkspace().getRoot().getProject(Project.BNDCNF)};
 	}
 	private void setLastBuildTime(IProject project, long time) {
@@ -121,17 +135,26 @@ public class BndIncrementalBuilder extends IncrementalProjectBuilder {
 	}
 	@Override protected void clean(IProgressMonitor monitor)
 			throws CoreException {
-		// Clear markers
-		getProject().deleteMarkers(MARKER_BND_PROBLEM, true,
-				IResource.DEPTH_INFINITE);
 
-		// Delete target files
-		Project model = Plugin.getDefault().getCentral().getModel(JavaCore.create(getProject()));
-		try {
-			model.clean();
-		} catch (Exception e) {
-			throw new CoreException(new Status(IStatus.ERROR, Plugin.PLUGIN_ID, 0, "Error cleaning project outputs.", e));
-		}
+        try {
+            if (monitor != null)
+                monitor.beginTask("Cleaning " + getProject().getName() + "...", 1);
+
+    	    // Clear markers
+    		getProject().deleteMarkers(MARKER_BND_PROBLEM, true,
+    				IResource.DEPTH_INFINITE);
+    
+    		// Delete target files
+    		Project model = Plugin.getDefault().getCentral().getModel(JavaCore.create(getProject()));
+    		try {
+    			model.clean();
+    		} catch (Exception e) {
+    			throw new CoreException(new Status(IStatus.ERROR, Plugin.PLUGIN_ID, 0, "Error cleaning project outputs.", e));
+    		}
+        } finally {
+            if (monitor != null) 
+                monitor.done();
+        }
 	}
 	void incrementalRebuild(IResourceDelta delta, IProject project, IProgressMonitor monitor) {
 		SubMonitor progress = SubMonitor.convert(monitor);
@@ -155,7 +178,8 @@ public class BndIncrementalBuilder extends IncrementalProjectBuilder {
 			ResourceDeltaAccumulator visitor = new ResourceDeltaAccumulator(IResourceDelta.ADDED | IResourceDelta.CHANGED | IResourceDelta.REMOVED, affectedFiles, generatedFilter);
 			delta.accept(visitor);
 
-			progress.setWorkRemaining(affectedFiles.size() + 10);
+			if (progress != null)
+			    progress.setWorkRemaining(affectedFiles.size() + 10);
 
 			boolean rebuild = false;
 			List<File> deletedBnds = new LinkedList<File>();
@@ -217,7 +241,7 @@ public class BndIncrementalBuilder extends IncrementalProjectBuilder {
 					resource.delete(false, null);
 				}
 			}
-
+			checkCancel(progress);
 			if(rebuild)
 				rebuildBndProject(project, monitor);
 		} catch (Exception e) {
@@ -227,7 +251,7 @@ public class BndIncrementalBuilder extends IncrementalProjectBuilder {
 		model.refresh();
 	}
 	void rebuildBndProject(IProject project, IProgressMonitor monitor) throws CoreException {
-		SubMonitor progress = SubMonitor.convert(monitor, 2);
+		SubMonitor progress = SubMonitor.convert(monitor, "Rebuilding " + project.getName() + "...",  2);
 		IJavaProject javaProject = JavaCore.create(project);
 
         Project model = Plugin.getDefault().getCentral().getModel(javaProject);
@@ -308,4 +332,15 @@ public class BndIncrementalBuilder extends IncrementalProjectBuilder {
 			model.clear();
 		}
 	}
+	
+    protected void checkCancel(IProgressMonitor monitor) {
+        if (monitor == null)
+            return;
+    
+        if (monitor.isCanceled()) {
+           forgetLastBuiltState();
+           throw new OperationCanceledException();
+        }
+     }
+
 }
