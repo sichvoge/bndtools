@@ -165,7 +165,7 @@ public class BndIncrementalBuilder extends IncrementalProjectBuilder {
                 monitor.done();
         }
 	}
-	void incrementalRebuild(IResourceDelta delta, IProject project, IProgressMonitor monitor) {
+	void incrementalRebuild(IResourceDelta delta, IProject project, IProgressMonitor monitor) throws CoreException {
 		SubMonitor progress = SubMonitor.convert(monitor);
 		Project model = Plugin.getDefault().getCentral().getModel(JavaCore.create(project));
         if (model == null) {
@@ -178,20 +178,23 @@ public class BndIncrementalBuilder extends IncrementalProjectBuilder {
 		try {
             List<File> affectedFiles = new ArrayList<File>();
             final File targetDir = model.getTarget();
+            final File output = model.getOutput();
             FileFilter generatedFilter = new FileFilter() {
                 public boolean accept(File pathname) {
-                    return !FileUtils.isAncestor(targetDir, pathname);
+                    return !FileUtils.isAncestor(targetDir, pathname) && !FileUtils.isAncestor(output, pathname);
                 }
 			};
 			ResourceDeltaAccumulator visitor = new ResourceDeltaAccumulator(IResourceDelta.ADDED | IResourceDelta.CHANGED | IResourceDelta.REMOVED, affectedFiles, generatedFilter);
 			delta.accept(visitor);
-
+			
 			if (progress != null)
 			    progress.setWorkRemaining(affectedFiles.size() + 10);
 
 			boolean rebuild = false;
 			List<File> deletedBnds = new LinkedList<File>();
 
+			File srcDir = model.getSrc();
+			
 			// Check if any affected file is a bnd file
 			for (File file : affectedFiles) {
 				if(file.getName().toLowerCase().endsWith(BND_SUFFIX)) {
@@ -201,6 +204,11 @@ public class BndIncrementalBuilder extends IncrementalProjectBuilder {
 						deletedBnds.add(file);
 					}
 					break;
+				}
+				// Check if source file was changed instead of class file
+				if (FileUtils.isAncestor(srcDir, file)) {
+				    rebuild = true;
+				    break;
 				}
 			}
 			if(!rebuild && !affectedFiles.isEmpty()) {
@@ -246,8 +254,9 @@ public class BndIncrementalBuilder extends IncrementalProjectBuilder {
 			if(rebuild)
 				rebuildBndProject(project, monitor);
 		} catch (Exception e) {
-			// TODO Auto-generated catch block
-			e.printStackTrace();
+		    if (e instanceof CoreException) 
+		        throw (CoreException) e;
+		    throw new CoreException(new Status(IStatus.ERROR, Plugin.PLUGIN_ID, 0, "Error building project.", e));
 		}
 		model.refresh();
 	}
@@ -280,7 +289,7 @@ public class BndIncrementalBuilder extends IncrementalProjectBuilder {
         } catch (BndContainerException e) {
             IMarker marker = project.createMarker(MARKER_BND_CLASSPATH_PROBLEM);
             marker.setAttribute(IMarker.SEVERITY, IMarker.SEVERITY_ERROR);
-            marker.setAttribute(IMarker.MESSAGE, "PK:" + e.getCause().getMessage());
+            marker.setAttribute(IMarker.MESSAGE, e.getCause().getMessage());
             marker.setAttribute(IMarker.LINE_NUMBER, 1);
             throw new CoreException(new Status(IStatus.ERROR, Plugin.PLUGIN_ID, 0, "Error building project.", e));
         }
@@ -340,13 +349,13 @@ public class BndIncrementalBuilder extends IncrementalProjectBuilder {
 		} catch (CircularDependencyException e) {
             IMarker marker = project.createMarker(MARKER_BND_CLASSPATH_PROBLEM);
             marker.setAttribute(IMarker.SEVERITY, IMarker.SEVERITY_ERROR);
-            marker.setAttribute(IMarker.MESSAGE, "PK2:" + e.getCause().getMessage());
+            marker.setAttribute(IMarker.MESSAGE, e.getCause().getMessage());
             marker.setAttribute(IMarker.LINE_NUMBER, 1);
             throw new CoreException(new Status(IStatus.ERROR, Plugin.PLUGIN_ID, 0, "Circular dependencies building project.", e));
         } catch (BuildPathException e) {
             IMarker marker = project.createMarker(MARKER_BND_CLASSPATH_PROBLEM);
             marker.setAttribute(IMarker.SEVERITY, IMarker.SEVERITY_ERROR);
-            marker.setAttribute(IMarker.MESSAGE, "PK3:" + e.getCause().getMessage());
+            marker.setAttribute(IMarker.MESSAGE, e.getCause().getMessage());
             marker.setAttribute(IMarker.LINE_NUMBER, 1);
             throw new CoreException(new Status(IStatus.ERROR, Plugin.PLUGIN_ID, 0, "Error building project.", e));
 		} catch (Exception e) {
