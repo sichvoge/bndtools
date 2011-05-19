@@ -43,15 +43,19 @@ import org.eclipse.core.runtime.Path;
 import org.eclipse.core.runtime.Status;
 import org.eclipse.core.runtime.SubMonitor;
 import org.eclipse.jdt.core.IClasspathContainer;
+import org.eclipse.jdt.core.IClasspathEntry;
 import org.eclipse.jdt.core.IJavaProject;
 import org.eclipse.jdt.core.JavaCore;
 
+import aQute.bnd.build.BuildPathException;
+import aQute.bnd.build.CircularDependencyException;
 import aQute.bnd.build.Container;
 import aQute.bnd.build.Project;
 import aQute.lib.osgi.Builder;
 import bndtools.Plugin;
 import bndtools.RepositoryIndexerJob;
 import bndtools.classpath.BndContainer;
+import bndtools.classpath.BndContainerException;
 import bndtools.classpath.BndContainerInitializer;
 import bndtools.utils.FileUtils;
 import bndtools.utils.ResourceDeltaAccumulator;
@@ -80,6 +84,9 @@ public class BndIncrementalBuilder extends IncrementalProjectBuilder {
             
     		ensureBndBndExists(project);
     
+    	      if (isClasspathBroken(project)) 
+    	            kind = FULL_BUILD;
+
     		if (getLastBuildTime(project) == -1 || kind == FULL_BUILD) {
     			rebuildBndProject(project, monitor);
     		} else {
@@ -143,6 +150,8 @@ public class BndIncrementalBuilder extends IncrementalProjectBuilder {
     	    // Clear markers
     		getProject().deleteMarkers(MARKER_BND_PROBLEM, true,
     				IResource.DEPTH_INFINITE);
+            getProject().deleteMarkers(MARKER_BND_CLASSPATH_PROBLEM, true,
+                    IResource.DEPTH_INFINITE);
     
     		// Delete target files
     		Project model = Plugin.getDefault().getCentral().getModel(JavaCore.create(getProject()));
@@ -169,10 +178,9 @@ public class BndIncrementalBuilder extends IncrementalProjectBuilder {
 		try {
             List<File> affectedFiles = new ArrayList<File>();
             final File targetDir = model.getTarget();
-            final File output = model.getOutput();
             FileFilter generatedFilter = new FileFilter() {
                 public boolean accept(File pathname) {
-                    return !FileUtils.isAncestor(targetDir, pathname) && !FileUtils.isAncestor(output, pathname);
+                    return !FileUtils.isAncestor(targetDir, pathname);
                 }
 			};
 			ResourceDeltaAccumulator visitor = new ResourceDeltaAccumulator(IResourceDelta.ADDED | IResourceDelta.CHANGED | IResourceDelta.REMOVED, affectedFiles, generatedFilter);
@@ -184,8 +192,6 @@ public class BndIncrementalBuilder extends IncrementalProjectBuilder {
 			boolean rebuild = false;
 			List<File> deletedBnds = new LinkedList<File>();
 
-			File srcDir = model.getSrc();
-			
 			// Check if any affected file is a bnd file
 			for (File file : affectedFiles) {
 				if(file.getName().toLowerCase().endsWith(BND_SUFFIX)) {
@@ -195,11 +201,6 @@ public class BndIncrementalBuilder extends IncrementalProjectBuilder {
 						deletedBnds.add(file);
 					}
 					break;
-				}
-				// Check if source file was changed instead of class file
-				if (FileUtils.isAncestor(srcDir, file)) {
-				    rebuild = true;
-				    break;
 				}
 			}
 			if(!rebuild && !affectedFiles.isEmpty()) {
@@ -269,12 +270,30 @@ public class BndIncrementalBuilder extends IncrementalProjectBuilder {
 		IFile bndFile = project.getFile(Project.BNDFILE);
 
 		// Clear markers
-		if (bndFile.exists()) {
-			bndFile.deleteMarkers(MARKER_BND_PROBLEM, true, IResource.DEPTH_INFINITE);
-		}
+		if (bndFile.exists()) 
+		    bndFile.deleteMarkers(MARKER_BND_PROBLEM, true, IResource.DEPTH_INFINITE);
+		project.deleteMarkers(MARKER_BND_CLASSPATH_PROBLEM, true, IResource.DEPTH_INFINITE);
+
+		IClasspathEntry[] entries;
+        try {
+            entries = BndContainerInitializer.calculateEntries(model);
+        } catch (BndContainerException e) {
+            IMarker marker = project.createMarker(MARKER_BND_CLASSPATH_PROBLEM);
+            marker.setAttribute(IMarker.SEVERITY, IMarker.SEVERITY_ERROR);
+            marker.setAttribute(IMarker.MESSAGE, "PK:" + e.getCause().getMessage());
+            marker.setAttribute(IMarker.LINE_NUMBER, 1);
+            throw new CoreException(new Status(IStatus.ERROR, Plugin.PLUGIN_ID, 0, "Error building project.", e));
+        }
+		
+        // When kind = CLEAN_BUILD artifacts in other projects may be missing, so tell the builder to rebuild later
+        if (!isBuildPathValid(model)) {
+            super.forgetLastBuiltState();
+            super.needRebuild();
+            return;
+        }
 
 		// Update classpath
-		JavaCore.setClasspathContainer(BndContainerInitializer.ID, new IJavaProject[] { javaProject } , new IClasspathContainer[] { new BndContainer(javaProject, BndContainerInitializer.calculateEntries(model)) }, null);
+		JavaCore.setClasspathContainer(BndContainerInitializer.ID, new IJavaProject[] { javaProject } , new IClasspathContainer[] { new BndContainer(javaProject, entries) }, null);
 
 		// Build
 		try {
@@ -288,8 +307,8 @@ public class BndIncrementalBuilder extends IncrementalProjectBuilder {
 				bndsToDeliverables.put(subBndFile, deliverable);
 				deliverableJars.add(deliverable.getFile());
 			}
-
-			model.build();
+						
+		    model.buildLocal(false);
 			progress.worked(1);
 
 			File targetDir = model.getTarget();
@@ -318,6 +337,18 @@ public class BndIncrementalBuilder extends IncrementalProjectBuilder {
                 }
 			};
 			deleteJob.schedule();
+		} catch (CircularDependencyException e) {
+            IMarker marker = project.createMarker(MARKER_BND_CLASSPATH_PROBLEM);
+            marker.setAttribute(IMarker.SEVERITY, IMarker.SEVERITY_ERROR);
+            marker.setAttribute(IMarker.MESSAGE, "PK2:" + e.getCause().getMessage());
+            marker.setAttribute(IMarker.LINE_NUMBER, 1);
+            throw new CoreException(new Status(IStatus.ERROR, Plugin.PLUGIN_ID, 0, "Circular dependencies building project.", e));
+        } catch (BuildPathException e) {
+            IMarker marker = project.createMarker(MARKER_BND_CLASSPATH_PROBLEM);
+            marker.setAttribute(IMarker.SEVERITY, IMarker.SEVERITY_ERROR);
+            marker.setAttribute(IMarker.MESSAGE, "PK3:" + e.getCause().getMessage());
+            marker.setAttribute(IMarker.LINE_NUMBER, 1);
+            throw new CoreException(new Status(IStatus.ERROR, Plugin.PLUGIN_ID, 0, "Error building project.", e));
 		} catch (Exception e) {
 			throw new CoreException(new Status(IStatus.ERROR, Plugin.PLUGIN_ID, 0, "Error building project.", e));
 		}
@@ -342,5 +373,27 @@ public class BndIncrementalBuilder extends IncrementalProjectBuilder {
            throw new OperationCanceledException();
         }
      }
+
+    private boolean isBuildPathValid(Project project) {
+        try {
+            for (Container file : project.getBuildpath()) {
+                if (!file.getFile().exists()) {
+                    return false;
+                }
+            }
+        } catch (Exception e) {
+            return false;
+        }
+
+        return true;
+    }
+
+    private boolean isClasspathBroken(IProject project) throws CoreException {
+        IMarker[] markers = project.findMarkers(MARKER_BND_CLASSPATH_PROBLEM, false, IResource.DEPTH_ZERO);
+        for (int i = 0, l = markers.length; i < l; i++)
+            if (((Integer) markers[i].getAttribute(IMarker.SEVERITY)).intValue() == IMarker.SEVERITY_ERROR)
+                return true;
+        return false;
+    }
 
 }

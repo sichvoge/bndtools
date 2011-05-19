@@ -43,6 +43,8 @@ public class BndContainerInitializer extends ClasspathContainerInitializer
 
     public final static Path ID      = new Path("aQute.bnd.classpath.container");
 
+    private static final IClasspathEntry[] EMPTY_CP_ENTRIES = new IClasspathEntry[0];
+    
     final Central central = Plugin.getDefault().getCentral();
 
     public BndContainerInitializer() {
@@ -52,7 +54,13 @@ public class BndContainerInitializer extends ClasspathContainerInitializer
     @Override
     public void initialize(IPath containerPath, IJavaProject project) throws CoreException {
         Project model = central.getModel(project);
-        requestClasspathContainerUpdate(containerPath, project, new BndContainer(project, calculateEntries(model)));
+        IClasspathEntry[] entries;
+        try {
+            entries = calculateEntries(model);
+        } catch (BndContainerException e) {
+            entries = EMPTY_CP_ENTRIES;
+        }
+        requestClasspathContainerUpdate(containerPath, project, new BndContainer(project, entries));
     }
 
     @Override
@@ -78,23 +86,23 @@ public class BndContainerInitializer extends ClasspathContainerInitializer
         System.out.println("Workspace changed");
     }
 
-    public static IClasspathEntry[] calculateEntries(Project project) {
+    public static IClasspathEntry[] calculateEntries(Project project) throws BndContainerException {
         if(project == null)
-            return new IClasspathEntry[0];
+            return EMPTY_CP_ENTRIES;
 
         Collection<Container> buildpath;
         try {
             buildpath = project.getBuildpath();
         } catch (Exception e) {
             Plugin.log(new Status(IStatus.ERROR, Plugin.PLUGIN_ID, 0, "Error getting project build path.", e));
-            buildpath = Collections.emptyList();
+            throw new BndContainerException(e);
         }
         Collection<Container> bootclasspath;
         try {
             bootclasspath = project.getBootclasspath();
         } catch (Exception e) {
             Plugin.log(new Status(IStatus.ERROR, Plugin.PLUGIN_ID, 0, "Error getting project boot classpath.", e));
-            bootclasspath = Collections.emptyList();
+            throw new BndContainerException(e);
         }
 
         List<Container> entries = new ArrayList<Container>(buildpath.size() + bootclasspath.size());
