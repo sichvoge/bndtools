@@ -20,8 +20,8 @@ import org.eclipse.core.runtime.IProgressMonitor;
 
 import aQute.bnd.build.Project;
 import aQute.bnd.service.RepositoryPlugin;
+import aQute.lib.jardiff.JarDiff;
 import aQute.lib.osgi.Jar;
-import bndtools.diff.JarDiff;
 import bndtools.release.api.IReleaseParticipant.Scope;
 
 public class ReleaseContext {

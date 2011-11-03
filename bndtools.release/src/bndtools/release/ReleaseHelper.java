@@ -31,17 +31,20 @@ import org.eclipse.ui.PlatformUI;
 import aQute.bnd.build.Project;
 import aQute.bnd.service.RepositoryPlugin.Strategy;
 import aQute.lib.io.IO;
+import aQute.lib.jardiff.Diff;
+import aQute.lib.jardiff.JarDiff;
+import aQute.lib.jardiff.java.JavaDiff;
+import aQute.lib.jardiff.java.PackageInfo;
 import aQute.lib.osgi.Builder;
 import aQute.lib.osgi.Jar;
 import aQute.libg.reporter.Reporter;
-import bndtools.diff.JarDiff;
-import bndtools.diff.PackageInfo;
+import aQute.libg.version.Version;
 import bndtools.editor.model.BndEditModel;
 import bndtools.release.api.IReleaseParticipant;
-import bndtools.release.api.ReleaseUtils;
 import bndtools.release.api.IReleaseParticipant.Scope;
 import bndtools.release.api.ReleaseContext;
 import bndtools.release.api.ReleaseContext.Error;
+import bndtools.release.api.ReleaseUtils;
 
 public class ReleaseHelper {
 
@@ -54,13 +57,16 @@ public class ReleaseHelper {
 			if (current == null) {
 				continue;
 			}
-			for (PackageInfo pi : current.getModifiedExportedPackages()) {
-				if (pi.getCurrentVersion() != null && !pi.getCurrentVersion().equals(pi.getSuggestedVersion())) {
+			
+			JavaDiff javaDiff = getJavaDiff(current);
+			
+			for (PackageInfo pi : javaDiff.getModifiedExportedPackages()) {
+				if (pi.getOldVersion() != null && !pi.getOldVersion().equals(pi.getSuggestedVersion())) {
 					updatePackageInfoFile(context.getProject(), pi);
 				}
 			}
 
-			for (PackageInfo pi : current.getNewExportedPackages()) {
+			for (PackageInfo pi : javaDiff.getNewExportedPackages()) {
 				updatePackageInfoFile(context.getProject(), pi);
 			}
 
@@ -68,9 +74,19 @@ public class ReleaseHelper {
    		}
 	}
 
+	public static JavaDiff getJavaDiff(JarDiff jarDiff) {
+		for (Diff diff : jarDiff.getContained()) {
+			if (diff instanceof JavaDiff) {
+				return (JavaDiff) diff;
+			}
+		}
+		return null;
+
+	}
+	
 	private static void updateBundleVersion(ReleaseContext context, JarDiff current, Builder builder) throws IOException, CoreException {
 
-		String bundleVersion = current.getSelectedVersion();
+		Version bundleVersion = current.getNewVersion();
 		if (bundleVersion != null) {
 
 			File file = builder.getPropertiesFile();
@@ -88,7 +104,7 @@ public class ReleaseHelper {
 			if (savedVersion != null && savedVersion.indexOf('$') > -1) {
 				//TODO: Handle macros / variables
 			}
-			model.setBundleVersion(bundleVersion);
+			model.setBundleVersion(bundleVersion.toString());
 
 			final IDocument finalDoc = document;
 			Runnable run = new Runnable() {
@@ -275,7 +291,7 @@ public class ReleaseHelper {
 		}
 	}
 
-	private static boolean equalsPackageInfoFileVersion(File packageInfoFile, String version) throws IOException {
+	private static boolean equalsPackageInfoFileVersion(File packageInfoFile, Version version) throws IOException {
 		// Check existing version
 		if (packageInfoFile.exists()) {
 			BufferedReader reader = null;
@@ -285,7 +301,7 @@ public class ReleaseHelper {
 				while ((line = reader.readLine()) != null) {
 					line = line.trim();
 					if (line.startsWith("version ")) {
-						String fileVersion = line.substring(8);
+						Version fileVersion = Version.parseVersion(line.substring(8));
 						if (fileVersion.equals(version)) {
 							return true;
 						}

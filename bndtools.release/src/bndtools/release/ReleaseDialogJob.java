@@ -27,7 +27,7 @@ import org.eclipse.ui.PlatformUI;
 
 import aQute.bnd.build.Project;
 import aQute.bnd.service.RepositoryPlugin;
-import bndtools.diff.JarDiff;
+import aQute.lib.jardiff.JarDiff;
 import bndtools.release.nl.Messages;
 
 public class ReleaseDialogJob extends Job {

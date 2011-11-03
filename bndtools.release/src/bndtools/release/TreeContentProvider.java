@@ -19,11 +19,14 @@ import java.util.TreeSet;
 import org.eclipse.jface.viewers.ITreeContentProvider;
 import org.eclipse.jface.viewers.Viewer;
 
-import bndtools.diff.ClassInfo;
-import bndtools.diff.FieldInfo;
-import bndtools.diff.JarDiff;
-import bndtools.diff.MethodInfo;
-import bndtools.diff.PackageInfo;
+import aQute.lib.jardiff.Diff;
+import aQute.lib.jardiff.Group;
+import aQute.lib.jardiff.JarDiff;
+import aQute.lib.jardiff.java.ClassInfo;
+import aQute.lib.jardiff.java.FieldInfo;
+import aQute.lib.jardiff.java.JavaDiff;
+import aQute.lib.jardiff.java.MethodInfo;
+import aQute.lib.jardiff.java.PackageInfo;
 
 /**
  * @see org.eclipse.jface.viewers.ITreeContentProvider
@@ -44,16 +47,21 @@ public class TreeContentProvider implements ITreeContentProvider {
 			Object[] ret = new Object[list.size()];
 			return list.toArray(ret);
 		} 
-		if (parent instanceof JarDiff) {
+		if (parent instanceof JavaDiff) {
 			Collection<PackageInfo> pkgs = new TreeSet<PackageInfo>();
 			if (showAll) {
-				pkgs.addAll(((JarDiff)parent).getImportedPackages());
-				pkgs.addAll(((JarDiff)parent).getExportedPackages());
+				pkgs.addAll(((JavaDiff)parent).getImportedPackages());
+				pkgs.addAll(((JavaDiff)parent).getExportedPackages());
 			} else {
-				pkgs.addAll(((JarDiff)parent).getChangedImportedPackages());
-				pkgs.addAll(((JarDiff)parent).getChangedExportedPackages());
+				pkgs.addAll(((JavaDiff)parent).getChangedImportedPackages());
+				pkgs.addAll(((JavaDiff)parent).getChangedExportedPackages());
 			}
 			return pkgs.toArray(new Object[pkgs.size()]);
+		}
+		if (parent instanceof JarDiff) {
+			Collection<? extends Diff> diffs = ((JarDiff)parent).getContained();
+			Object[] ret = new Object[diffs.size()];
+			return diffs.toArray(ret);
 		}
 		if (parent instanceof PackageInfo) {
 			Set<ClassInfo> classes;
@@ -89,6 +97,11 @@ public class TreeContentProvider implements ITreeContentProvider {
 			}
 			return objs;
 		}
+		if (parent instanceof Group) {
+			Collection<? extends Diff> diffs = ((Group)parent).getContained();
+			Object[] ret = new Object[diffs.size()];
+			return diffs.toArray(ret);
+		}
 		return new Object[0];
 	}
 	/*
@@ -101,14 +114,19 @@ public class TreeContentProvider implements ITreeContentProvider {
 	 * @see org.eclipse.jface.viewers.ITreeContentProvider#hasChildren(java.lang.Object)
 	 */
 	public boolean hasChildren(Object parent) {
+		
 		if (parent instanceof JarDiff) {
+			return ((JarDiff)parent).getContained().size() > 0;
+		}
+
+		if (parent instanceof JavaDiff) {
 			Collection<PackageInfo> pkgs = new LinkedHashSet<PackageInfo>();
 			if (showAll) {
-				pkgs.addAll(((JarDiff)parent).getImportedPackages());
-				pkgs.addAll(((JarDiff)parent).getExportedPackages());
+				pkgs.addAll(((JavaDiff)parent).getImportedPackages());
+				pkgs.addAll(((JavaDiff)parent).getExportedPackages());
 			} else {
-				pkgs.addAll(((JarDiff)parent).getChangedImportedPackages());
-				pkgs.addAll(((JarDiff)parent).getChangedExportedPackages());
+				pkgs.addAll(((JavaDiff)parent).getChangedImportedPackages());
+				pkgs.addAll(((JavaDiff)parent).getChangedExportedPackages());
 			}
 			return pkgs.size() > 0;
 		}
@@ -142,6 +160,9 @@ public class TreeContentProvider implements ITreeContentProvider {
 				fields =  ((ClassInfo)parent).getChangedFields();
 			}
 			return methods.size() > 0 || fields.size() > 0;
+		}
+		if (parent instanceof Group) {
+			return ((Group)parent).getContained().size() > 0;
 		}
 		return false;
 	}

@@ -36,11 +36,15 @@ import org.eclipse.swt.widgets.Composite;
 import org.eclipse.swt.widgets.Control;
 import org.eclipse.swt.widgets.Widget;
 
-import bndtools.diff.ClassInfo;
-import bndtools.diff.FieldInfo;
-import bndtools.diff.JarDiff;
-import bndtools.diff.MethodInfo;
-import bndtools.diff.PackageInfo;
+import aQute.lib.jardiff.Diff.Delta;
+import aQute.lib.jardiff.Group;
+import aQute.lib.jardiff.JarDiff;
+import aQute.lib.jardiff.PackageDiff.PackageSeverity;
+import aQute.lib.jardiff.java.ClassInfo;
+import aQute.lib.jardiff.java.FieldInfo;
+import aQute.lib.jardiff.java.MethodInfo;
+import aQute.lib.jardiff.java.PackageInfo;
+import aQute.libg.version.Version;
 import bndtools.release.nl.Messages;
 
 public class BundleRelease {
@@ -108,6 +112,9 @@ public class BundleRelease {
 				if (element instanceof PackageInfo) {
 					return ((PackageInfo) element).getPackageName();
 				}
+				if (element instanceof Group) {
+					return ((Group)element).getName();
+				}
 				if (element instanceof ClassInfo) {
 					String name = ((ClassInfo) element).getName();
 					int idx = name.lastIndexOf('/');
@@ -140,14 +147,14 @@ public class BundleRelease {
 						baseImageKey = "package_import_export";
 					}
 					String overlayKey = null;
-					switch (pi.getChangeCode()) {
-					case PackageInfo.CHANGE_CODE_NEW : {
+					switch (pi.getDelta()) {
+					case ADDED : {
 						switch (pi.getSeverity()) {
-						case JarDiff.PKG_SEVERITY_MAJOR : {
+						case MAJOR : {
 							overlayKey = "major_add";
 							break;
 						}
-						case JarDiff.PKG_SEVERITY_MINOR : {
+						case MINOR : {
 							overlayKey = "minor_add";
 							break;
 						}
@@ -156,17 +163,17 @@ public class BundleRelease {
 						}
 						break;
 					}
-					case PackageInfo.CHANGE_CODE_REMOVED : {
+					case REMOVED : {
 						switch (pi.getSeverity()) {
-						case JarDiff.PKG_SEVERITY_MAJOR : {
+						case MAJOR : {
 							overlayKey = "major_remove";
 							break;
 						}
-						case JarDiff.PKG_SEVERITY_MINOR : {
+						case MINOR : {
 							overlayKey = "minor_remove";
 							break;
 						}
-						case JarDiff.PKG_SEVERITY_VERSION_MISSING : {
+						case MICRO : {
 							overlayKey = "micro_remove";
 							break;
 						}
@@ -175,23 +182,23 @@ public class BundleRelease {
 						}
 						break;
 					}
-					case PackageInfo.CHANGE_CODE_MODIFIED : {
+					case MODIFIED : {
 						switch (pi.getSeverity()) {
-						case JarDiff.PKG_SEVERITY_MAJOR : {
+						case MAJOR : {
 							overlayKey = "major_modify";
 							break;
 						}
-						case JarDiff.PKG_SEVERITY_MINOR : {
+						case MINOR : {
 							overlayKey = "minor_modify";
+							break;
+						}
+						case MICRO : {
+							overlayKey = "micro_modify";
 							break;
 						}
 						default:
 							break;
 						}
-						break;
-					}
-					case PackageInfo.CHANGE_CODE_VERSION_MISSING : {
-						overlayKey = "micro_modify";
 						break;
 					}
 					}
@@ -206,14 +213,14 @@ public class BundleRelease {
 					PackageInfo pi = ci.getPackageInfo();
 					String baseImageKey = "class";
 					String overlayKey = null;
-					switch (ci.getChangeCode()) {
-					case ClassInfo.CHANGE_CODE_NEW : {
+					switch (ci.getDelta()) {
+					case ADDED : {
 						switch (pi.getSeverity()) {
-						case JarDiff.PKG_SEVERITY_MAJOR : {
+						case MAJOR : {
 							overlayKey = "major_add";
 							break;
 						}
-						case JarDiff.PKG_SEVERITY_MINOR : {
+						case MINOR : {
 							overlayKey = "minor_add";
 							break;
 						}
@@ -222,13 +229,13 @@ public class BundleRelease {
 						}
 						break;
 					}
-					case ClassInfo.CHANGE_CODE_REMOVED : {
+					case REMOVED : {
 						switch (pi.getSeverity()) {
-						case JarDiff.PKG_SEVERITY_MAJOR : {
+						case MAJOR : {
 							overlayKey = "major_remove";
 							break;
 						}
-						case JarDiff.PKG_SEVERITY_MINOR : {
+						case MINOR : {
 							overlayKey = "minor_remove";
 							break;
 						}
@@ -237,13 +244,13 @@ public class BundleRelease {
 						}
 						break;
 					}
-					case ClassInfo.CHANGE_CODE_MODIFIED : {
+					case MODIFIED : {
 						switch (pi.getSeverity()) {
-						case JarDiff.PKG_SEVERITY_MAJOR : {
+						case MAJOR : {
 							overlayKey = "major_modify";
 							break;
 						}
-						case JarDiff.PKG_SEVERITY_MINOR : {
+						case MINOR : {
 							overlayKey = "minor_modify";
 							break;
 						}
@@ -268,14 +275,14 @@ public class BundleRelease {
 						baseImageKey = "static_method";
 					}
 					String overlayKey = null;
-					switch (ci.getChangeCode()) {
-					case MethodInfo.CHANGE_NEW : {
+					switch (ci.getDelta()) {
+					case ADDED : {
 						switch (pi.getSeverity()) {
-						case JarDiff.PKG_SEVERITY_MAJOR : {
+						case MAJOR : {
 							overlayKey = "major_add";
 							break;
 						}
-						case JarDiff.PKG_SEVERITY_MINOR : {
+						case MINOR : {
 							overlayKey = "minor_add";
 							break;
 						}
@@ -284,13 +291,13 @@ public class BundleRelease {
 						}
 						break;
 					}
-					case MethodInfo.CHANGE_REMOVED : {
+					case REMOVED : {
 						switch (pi.getSeverity()) {
-						case JarDiff.PKG_SEVERITY_MAJOR : {
+						case MAJOR : {
 							overlayKey = "major_remove";
 							break;
 						}
-						case JarDiff.PKG_SEVERITY_MINOR : {
+						case MINOR : {
 							overlayKey = "minor_remove";
 							break;
 						}
@@ -314,14 +321,14 @@ public class BundleRelease {
 						baseImageKey = "static_field";
 					}
 					String overlayKey = null;
-					switch (ci.getChangeCode()) {
-					case FieldInfo.CHANGE_NEW : {
+					switch (ci.getDelta()) {
+					case ADDED : {
 						switch (pi.getSeverity()) {
-						case JarDiff.PKG_SEVERITY_MAJOR : {
+						case MAJOR : {
 							overlayKey = "major_add";
 							break;
 						}
-						case JarDiff.PKG_SEVERITY_MINOR : {
+						case MINOR : {
 							overlayKey = "minor_add";
 							break;
 						}
@@ -330,13 +337,13 @@ public class BundleRelease {
 						}
 						break;
 					}
-					case FieldInfo.CHANGE_REMOVED : {
+					case REMOVED : {
 						switch (pi.getSeverity()) {
-						case JarDiff.PKG_SEVERITY_MAJOR : {
+						case MAJOR : {
 							overlayKey = "major_remove";
 							break;
 						}
-						case JarDiff.PKG_SEVERITY_MINOR : {
+						case MINOR : {
 							overlayKey = "minor_remove";
 							break;
 						}
@@ -362,10 +369,10 @@ public class BundleRelease {
 		currentVersion.setLabelProvider(new ColumnLabelProvider() {
 			public String getText(Object element) {
 				if (element instanceof JarDiff) {
-					return ((JarDiff) element).getCurrentVersion();
+					return ((JarDiff) element).getOldVersion() == null ? "" : ((JarDiff) element).getOldVersion().toString();
 				}
 				if (element instanceof PackageInfo) {
-					return ((PackageInfo) element).getCurrentVersion();
+					return ((PackageInfo) element).getOldVersion() == null ? "" : ((PackageInfo) element).getOldVersion().toString();
 				}
 				if (element instanceof ClassInfo) {
 					return "";
@@ -391,10 +398,10 @@ public class BundleRelease {
 		suggestedVersion.setLabelProvider(new ColumnLabelProvider() {
 			public String getText(Object element) {
 				if (element instanceof JarDiff) {
-					return ((JarDiff) element).getSuggestedVersion();
+					return ((JarDiff) element).getSuggestedVersion() == null ? "" : ((JarDiff) element).getSuggestedVersion().toString();
 				}
 				if (element instanceof PackageInfo) {
-					return ((PackageInfo) element).getSuggestedVersion();
+					return ((PackageInfo) element).getSuggestedVersion() == null ? "" : ((PackageInfo) element).getSuggestedVersion().toString();
 				}
 				if (element instanceof ClassInfo) {
 					return "";
@@ -426,7 +433,7 @@ public class BundleRelease {
 					return "";
 				}
 				if (element instanceof PackageInfo) {
-					return ((PackageInfo) element).getVersionRange() == null ? "" : ((PackageInfo) element).getVersionRange();
+					return ((PackageInfo) element).getOldVersionRange() == null ? "" : ((PackageInfo) element).getOldVersionRange().toString();
 				}
 				if (element instanceof ClassInfo) {
 					return "";
@@ -455,7 +462,7 @@ public class BundleRelease {
 					return "";
 				}
 				if (element instanceof PackageInfo) {
-					return ((PackageInfo) element).getSuggestedVersionRange() == null ? "" : ((PackageInfo) element).getSuggestedVersionRange();
+					return ((PackageInfo) element).getSuggestedVersionRange() == null ? "" : ((PackageInfo) element).getSuggestedVersionRange().toString();
 				}
 				if (element instanceof ClassInfo) {
 					return "";
@@ -543,10 +550,10 @@ public class BundleRelease {
 				if (pi.isImported() && !pi.isExported()) {
 					return false;
 				}
-				if (pi.getChangeCode() == PackageInfo.CHANGE_CODE_REMOVED) {
+				if (pi.getDelta() == Delta.REMOVED) {
 					return false;
 				}
-				if (pi.getChangeCode() == PackageInfo.CHANGE_CODE_VERSION_MISSING) {
+				if (pi.getDelta() == Delta.MODIFIED && pi.getSeverity() == PackageSeverity.MICRO) {
 					return true;
 				}
 				return pi.getSuggestedVersion() != null;
@@ -558,33 +565,34 @@ public class BundleRelease {
 			
 //			String suggestedVersion = null;
 			
-			Set<String> versions = new TreeSet<String>();
+			Set<Version> versions = new TreeSet<Version>();
 			if (element instanceof JarDiff) {
 				JarDiff diff = (JarDiff) element;
-				if (diff.getCurrentVersion() != null) {
-					versions.add(diff.getCurrentVersion());
+				if (diff.getOldVersion() != null) {
+					versions.add(diff.getOldVersion());
 				}
 				
-				for (String suggestedVersion : diff.getSuggestedVersions()) {
+				for (Version suggestedVersion : diff.getSuggestedVersions()) {
 					versions.add(suggestedVersion);
 				}
 				
 			} else {
 				PackageInfo pi = (PackageInfo) element;
 	
-				if (pi.getCurrentVersion() != null) {
-					versions.add(pi.getCurrentVersion());
+				if (pi.getOldVersion() != null) {
+					versions.add(pi.getOldVersion());
 				}
-				for (String suggestedVersion : pi.getSuggestedVersions()) {
+				for (Version suggestedVersion : pi.getSuggestedVersions()) {
 					versions.add(suggestedVersion);
 				}
-				if (pi.getJarDiff().getCurrentVersion() != null) {
-					versions.add(pi.getJarDiff().getCurrentVersion());
+				JarDiff jarDiff = (JarDiff) pi.getContainer();
+				if (jarDiff.getOldVersion() != null) {
+					versions.add(jarDiff.getOldVersion());
 				}
-				if (pi.getJarDiff().getSuggestedVersion() != null) {
-					versions.add(pi.getJarDiff().getSuggestedVersion());
+				if (jarDiff.getSuggestedVersion() != null) {
+					versions.add(jarDiff.getSuggestedVersion());
 				}
-				for (String suggestedVersion : pi.getJarDiff().getSuggestedVersions()) {
+				for (Version suggestedVersion : jarDiff.getSuggestedVersions()) {
 					versions.add(suggestedVersion);
 				}
 			}
@@ -613,12 +621,12 @@ public class BundleRelease {
 
 		protected void initializeCellEditorValue(CellEditor cellEditor, ViewerCell cell) {
 			
-			String selectedVersion;
+			Version selectedVersion;
 			if (cell.getElement() instanceof JarDiff) {
-				selectedVersion = ((JarDiff) cell.getElement()).getSelectedVersion();
+				selectedVersion = ((JarDiff) cell.getElement()).getNewVersion();
 			} else {
 				PackageInfo pi = (PackageInfo) cell.getElement();
-				selectedVersion = pi.getSelectedVersion();
+				selectedVersion = pi.getNewVersion();
 			}
 
 			String[] items = ((ComboBoxCellEditor)cellEditor).getItems();
@@ -629,25 +637,25 @@ public class BundleRelease {
 					break;
 				}
 			}
-			
+
 			cellEditor.setValue(idx);
-			cell.setText(selectedVersion);
+			cell.setText(selectedVersion.toString());
 
 		}
 
 		protected void saveCellEditorValue(CellEditor cellEditor, ViewerCell cell) {
 			int idx = ((Integer)cellEditor.getValue()).intValue();
 			String[] items = ((ComboBoxCellEditor)cellEditor).getItems();
-			
+
 			String selectedVersion = items[idx];
 			cell.setText(selectedVersion);
 
 			if (cell.getElement() instanceof JarDiff) {
-				((JarDiff)cell.getElement()).setSelectedVersion(selectedVersion);
+				((JarDiff)cell.getElement()).setNewVersion(Version.parseVersion(selectedVersion));
 				return;
 			}
 			PackageInfo modelElement = (PackageInfo) cell.getElement();
-			modelElement.setSelectedVersion(selectedVersion);
+			modelElement.setNewVersion(Version.parseVersion(selectedVersion));
 		}
 	}
 	

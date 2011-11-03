@@ -12,8 +12,6 @@ import org.eclipse.core.runtime.Status;
 import org.eclipse.jface.text.Document;
 import org.eclipse.jface.text.IDocument;
 
-import bndtools.Plugin;
-
 public class FileUtils {
 	public static IDocument readFully(IFile file) throws CoreException, IOException {
 		if(file.exists()) {
@@ -51,7 +49,7 @@ public class FileUtils {
 			if(createIfAbsent)
 				file.create(inputStream, false, null);
 			else
-				throw new CoreException(new Status(IStatus.ERROR, Plugin.PLUGIN_ID, 0, "File does not exist: " + file.getFullPath().toString(), null));
+				throw new CoreException(new Status(IStatus.ERROR, Activator.PLUGIN_ID, 0, "File does not exist: " + file.getFullPath().toString(), null));
 		}
 	}
 }
