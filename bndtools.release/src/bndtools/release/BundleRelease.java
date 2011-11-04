@@ -374,15 +374,6 @@ public class BundleRelease {
 				if (element instanceof PackageInfo) {
 					return ((PackageInfo) element).getOldVersion() == null ? "" : ((PackageInfo) element).getOldVersion().toString();
 				}
-				if (element instanceof ClassInfo) {
-					return "";
-				}
-				if (element instanceof MethodInfo) {
-					return "";
-				}
-				if (element instanceof FieldInfo) {
-					return "";
-				}
 				return "";
 			}
 
@@ -403,15 +394,6 @@ public class BundleRelease {
 				if (element instanceof PackageInfo) {
 					return ((PackageInfo) element).getSuggestedVersion() == null ? "" : ((PackageInfo) element).getSuggestedVersion().toString();
 				}
-				if (element instanceof ClassInfo) {
-					return "";
-				}
-				if (element instanceof MethodInfo) {
-					return "";
-				}
-				if (element instanceof FieldInfo) {
-					return "";
-				}
 				return "";
 			}
 
@@ -429,20 +411,8 @@ public class BundleRelease {
 		versionRange.getColumn().setWidth(100);
 		versionRange.setLabelProvider(new ColumnLabelProvider() {
 			public String getText(Object element) {
-				if (element instanceof JarDiff) {
-					return "";
-				}
 				if (element instanceof PackageInfo) {
 					return ((PackageInfo) element).getOldVersionRange() == null ? "" : ((PackageInfo) element).getOldVersionRange().toString();
-				}
-				if (element instanceof ClassInfo) {
-					return "";
-				}
-				if (element instanceof MethodInfo) {
-					return "";
-				}
-				if (element instanceof FieldInfo) {
-					return "";
 				}
 				return "";
 			}
@@ -458,20 +428,8 @@ public class BundleRelease {
 		suggestedVersionRange.getColumn().setWidth(100);
 		suggestedVersionRange.setLabelProvider(new ColumnLabelProvider() {
 			public String getText(Object element) {
-				if (element instanceof JarDiff) {
-					return "";
-				}
 				if (element instanceof PackageInfo) {
 					return ((PackageInfo) element).getSuggestedVersionRange() == null ? "" : ((PackageInfo) element).getSuggestedVersionRange().toString();
-				}
-				if (element instanceof ClassInfo) {
-					return "";
-				}
-				if (element instanceof MethodInfo) {
-					return "";
-				}
-				if (element instanceof FieldInfo) {
-					return "";
 				}
 				return "";
 			}
@@ -480,8 +438,6 @@ public class BundleRelease {
 				return null;
 			}
 		});
-		
-
 		treeViewer.setContentProvider(treeProvider);
 	}
 
@@ -565,35 +521,35 @@ public class BundleRelease {
 			
 //			String suggestedVersion = null;
 			
-			Set<Version> versions = new TreeSet<Version>();
+			Set<String> versions = new TreeSet<String>();
 			if (element instanceof JarDiff) {
 				JarDiff diff = (JarDiff) element;
 				if (diff.getOldVersion() != null) {
-					versions.add(diff.getOldVersion());
+					versions.add(diff.getOldVersion().toString());
 				}
 				
 				for (Version suggestedVersion : diff.getSuggestedVersions()) {
-					versions.add(suggestedVersion);
+					versions.add(suggestedVersion.toString());
 				}
 				
 			} else {
 				PackageInfo pi = (PackageInfo) element;
 	
 				if (pi.getOldVersion() != null) {
-					versions.add(pi.getOldVersion());
+					versions.add(pi.getOldVersion().toString());
 				}
 				for (Version suggestedVersion : pi.getSuggestedVersions()) {
-					versions.add(suggestedVersion);
+					versions.add(suggestedVersion.toString());
 				}
 				JarDiff jarDiff = (JarDiff) pi.getContainer();
 				if (jarDiff.getOldVersion() != null) {
-					versions.add(jarDiff.getOldVersion());
+					versions.add(jarDiff.getOldVersion().toString());
 				}
 				if (jarDiff.getSuggestedVersion() != null) {
-					versions.add(jarDiff.getSuggestedVersion());
+					versions.add(jarDiff.getSuggestedVersion().toString());
 				}
 				for (Version suggestedVersion : jarDiff.getSuggestedVersions()) {
-					versions.add(suggestedVersion);
+					versions.add(suggestedVersion.toString());
 				}
 			}
 			
