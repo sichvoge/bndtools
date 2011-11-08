@@ -1,6 +1,7 @@
 package bndtools.builder;
 
 import java.io.File;
+import java.io.FileFilter;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashSet;
@@ -298,10 +299,10 @@ public class NewBuilder extends IncrementalProjectBuilder {
     private boolean rebuildIfLocalChanges() throws Exception {
         log(LOG_FULL, "calculating local changes...");
 
-        final Set<File> removedFiles = new HashSet<File>();
         final Set<File> changedFiles = new HashSet<File>();
 
         final IPath targetDirPath = calculateTargetDirPath(model);
+        final Set<File> targetJars = findJarsInTarget();
 
         boolean force = false;
 
@@ -324,18 +325,13 @@ public class NewBuilder extends IncrementalProjectBuilder {
 
                     if (resource.getType() == IResource.FILE) {
                         File file = resource.getLocation().toFile();
-                        if ((delta.getKind() & IResourceDelta.REMOVED) != 0) {
-                            removedFiles.add(file);
-                        } else {
-                            changedFiles.add(file);
-                        }
+                        changedFiles.add(file);
                     }
 
                     return false;
                 }
             });
-            log(LOG_FULL, "%d local files (outside target) removed: %s", removedFiles.size(), removedFiles);
-            log(LOG_FULL, "%d local files (outside target) changed: %s", changedFiles.size(), changedFiles);
+            log(LOG_FULL, "%d local files (outside target) changed or removed: %s", changedFiles.size(), changedFiles);
         } else {
             log(LOG_BASIC, "no info on local changes available");
         }
@@ -351,12 +347,29 @@ public class NewBuilder extends IncrementalProjectBuilder {
                 break;
             }
 
-            // Finally if any removed files are in scope for the bundle, we must force it to rebuild
-            // because bnd will not notice the deletion
-            if (!removedFiles.isEmpty() && builder.isInScope(removedFiles)) {
-                log(LOG_FULL, "some removed files were in scope for builder %s, will force a rebuild", builder.getBsn());
-                force = true;
-                break;
+            // Account for this builder's target JAR
+            targetJars.remove(targetFile);
+
+            // Finally if any removed or changed files are in scope for the bundle, we simply force rebuild
+            if (!changedFiles.isEmpty()) {
+                if (changedFiles.contains(builder.getPropertiesFile())) {
+                    log(LOG_FULL, "the properties file for builder %s was changes, will force a rebuild", builder.getBsn());
+                    force = true;
+                    break;
+                } else if (builder.isInScope(changedFiles)) {
+                    log(LOG_FULL, "some removed files were in scope for builder %s, will force a rebuild", builder.getBsn());
+                    force = true;
+                    break;
+                }
+            }
+        }
+
+        // Delete any unaccounted-for Jars from target dir
+        for (File jar : targetJars) {
+            try {
+                jar.delete();
+            } catch (Exception e) {
+                Plugin.logError("Error deleting target JAR: " + jar, e);
             }
         }
 
@@ -368,6 +381,20 @@ public class NewBuilder extends IncrementalProjectBuilder {
             builtAny = rebuild(false);
         }
         return builtAny;
+    }
+
+    private Set<File> findJarsInTarget() throws Exception {
+        File targetDir = model.getTarget();
+        File[] targetJars = targetDir.listFiles(new FileFilter() {
+            public boolean accept(File pathname) {
+                return pathname.getName().toLowerCase().endsWith(".jar");
+            }
+        });
+        Set<File> result = new HashSet<File>();
+        if (targetJars != null) for (File jar : targetJars) {
+            result.add(jar);
+        }
+        return result;
     }
 
     private static IPath calculateTargetDirPath(Project model) throws Exception {
@@ -440,7 +467,9 @@ public class NewBuilder extends IncrementalProjectBuilder {
         Collection<Project> dependsOn = model.getDependson();
         List<IProject> result = new ArrayList<IProject>(dependsOn.size() + 1);
 
-        result.add(WorkspaceUtils.findCnfProject());
+        IProject cnfProject = WorkspaceUtils.findCnfProject();
+        if (cnfProject != null)
+            result.add(cnfProject);
 
         IWorkspaceRoot wsroot = ResourcesPlugin.getWorkspace().getRoot();
         for (Project project : dependsOn) {
