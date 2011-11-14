@@ -1,13 +1,20 @@
 package bndtools.launch.ui;
 
+import java.io.ByteArrayOutputStream;
+import java.io.PrintStream;
+
 import org.bndtools.core.utils.jface.StatusLabelProvider;
 import org.bndtools.core.utils.jface.StatusTreeContentProvider;
 import org.eclipse.core.runtime.IStatus;
 import org.eclipse.jface.dialogs.IDialogConstants;
 import org.eclipse.jface.dialogs.IMessageProvider;
 import org.eclipse.jface.dialogs.TitleAreaDialog;
+import org.eclipse.jface.viewers.ISelectionChangedListener;
+import org.eclipse.jface.viewers.IStructuredSelection;
+import org.eclipse.jface.viewers.SelectionChangedEvent;
 import org.eclipse.jface.viewers.TableViewer;
 import org.eclipse.swt.SWT;
+import org.eclipse.swt.custom.SashForm;
 import org.eclipse.swt.graphics.Point;
 import org.eclipse.swt.layout.GridData;
 import org.eclipse.swt.layout.GridLayout;
@@ -16,6 +23,7 @@ import org.eclipse.swt.widgets.Control;
 import org.eclipse.swt.widgets.Label;
 import org.eclipse.swt.widgets.Shell;
 import org.eclipse.swt.widgets.Table;
+import org.eclipse.swt.widgets.Text;
 
 public class LaunchStatusDialog extends TitleAreaDialog {
 
@@ -24,9 +32,11 @@ public class LaunchStatusDialog extends TitleAreaDialog {
     private Table table;
 
     private TableViewer viewer;
+    private Text txtDetails;
 
     /**
      * Create the dialog.
+     *
      * @param parentShell
      */
     public LaunchStatusDialog(Shell parentShell, IStatus status) {
@@ -38,6 +48,7 @@ public class LaunchStatusDialog extends TitleAreaDialog {
 
     /**
      * Create contents of the dialog.
+     *
      * @param parent
      */
     @Override
@@ -54,22 +65,60 @@ public class LaunchStatusDialog extends TitleAreaDialog {
             setMessage(status.getMessage(), IMessageProvider.NONE);
 
         Composite container = (Composite) super.createDialogArea(parent);
-        container.setLayout(new GridLayout(1, false));
+        container.setLayout(new GridLayout(1, true));
 
-        new Label(container, SWT.NONE).setText("Problems:");
+        SashForm composite = new SashForm(container, SWT.NONE);
+        composite.setLayoutData(new GridData(SWT.FILL, SWT.FILL, true, true));
 
-        table = new Table(container, SWT.BORDER | SWT.FULL_SELECTION);
-        table.setLayoutData(new GridData(SWT.FILL, SWT.FILL, true, true, 1, 1));
+        Composite left = new Composite(composite, SWT.NONE);
+        left.setLayout(new GridLayout(1, false));
+        Composite right = new Composite(composite, SWT.NONE);
+        right.setLayout(new GridLayout(1, false));
 
+        Label lblProblems = new Label(left, SWT.NONE);
+        lblProblems.setText("Problems:");
+
+        Label lblDetails = new Label(right, SWT.NONE);
+        lblDetails.setText("Details:");
+
+        table = new Table(left, SWT.BORDER | SWT.FULL_SELECTION);
+        table.setLayoutData(new GridData(SWT.FILL, SWT.FILL, true, true));
         viewer = new TableViewer(table);
-        viewer.setContentProvider(new StatusTreeContentProvider());
-        viewer.setLabelProvider(new StatusLabelProvider());
 
-        viewer.setInput(status);
+        txtDetails = new Text(right, SWT.BORDER | SWT.READ_ONLY | SWT.MULTI | SWT.H_SCROLL | SWT.V_SCROLL);
+        txtDetails.setLayoutData(new GridData(SWT.FILL, SWT.FILL, true, true));
 
         Label lblQuestion = new Label(container, SWT.NONE);
-        lblQuestion.setLayoutData(new GridData(SWT.RIGHT, SWT.CENTER, false, false, 1, 1));
+        GridData gd_lblQuestion = new GridData(SWT.RIGHT, SWT.CENTER, false, false);
+        gd_lblQuestion.horizontalSpan = 2;
+        lblQuestion.setLayoutData(gd_lblQuestion);
         lblQuestion.setText("Placeholder");
+
+        viewer.setContentProvider(new StatusTreeContentProvider());
+        viewer.setLabelProvider(new StatusLabelProvider());
+        viewer.setInput(status);
+
+        viewer.addSelectionChangedListener(new ISelectionChangedListener() {
+            public void selectionChanged(SelectionChangedEvent event) {
+                IStatus status = (IStatus) ((IStructuredSelection) event.getSelection()).getFirstElement();
+
+                String detail = "";
+                if (status != null) {
+                    ByteArrayOutputStream messageBuffer = new ByteArrayOutputStream();
+                    PrintStream printer = new PrintStream(messageBuffer);
+
+                    printer.println(status.toString());
+
+                    Throwable e = status.getException();
+                    if (e != null)
+                        e.printStackTrace(printer);
+
+                    printer.flush();
+                    detail = messageBuffer.toString();
+                }
+                txtDetails.setText(detail);
+            }
+        });
 
         if (status.getSeverity() >= IStatus.ERROR) {
             lblQuestion.setText("One or more errors occurred while preparing the runtime environment.");
@@ -87,6 +136,7 @@ public class LaunchStatusDialog extends TitleAreaDialog {
 
     /**
      * Create contents of the button bar.
+     *
      * @param parent
      */
     @Override
@@ -104,6 +154,6 @@ public class LaunchStatusDialog extends TitleAreaDialog {
      */
     @Override
     protected Point getInitialSize() {
-        return new Point(450, 300);
+        return new Point(700, 400);
     }
 }

@@ -7,7 +7,10 @@ import java.util.Set;
 
 import org.eclipse.jface.fieldassist.ControlDecoration;
 import org.eclipse.jface.fieldassist.FieldDecorationRegistry;
+import org.eclipse.jface.preference.JFacePreferences;
+import org.eclipse.jface.resource.JFaceResources;
 import org.eclipse.jface.util.LocalSelectionTransfer;
+import org.eclipse.jface.viewers.ColumnViewerToolTipSupport;
 import org.eclipse.jface.viewers.IOpenListener;
 import org.eclipse.jface.viewers.IStructuredSelection;
 import org.eclipse.jface.viewers.OpenEvent;
@@ -15,6 +18,7 @@ import org.eclipse.jface.viewers.StyledCellLabelProvider;
 import org.eclipse.jface.viewers.TreeViewer;
 import org.eclipse.jface.viewers.ViewerCell;
 import org.eclipse.jface.viewers.ViewerFilter;
+import org.eclipse.jface.window.ToolTip;
 import org.eclipse.swt.SWT;
 import org.eclipse.swt.dnd.DND;
 import org.eclipse.swt.dnd.DragSourceEvent;
@@ -39,18 +43,17 @@ import org.eclipse.ui.forms.widgets.Section;
 import org.eclipse.ui.ide.IDE;
 import org.eclipse.ui.plugin.AbstractUIPlugin;
 
-import aQute.bnd.build.Workspace;
 import aQute.bnd.service.OBRIndexProvider;
 import aQute.bnd.service.OBRResolutionMode;
 import aQute.bnd.service.RepositoryPlugin;
 import bndtools.BndConstants;
-import bndtools.Central;
 import bndtools.Plugin;
 import bndtools.WorkspaceObrProvider;
 import bndtools.editor.common.BndEditorPart;
 import bndtools.model.repo.RepositoryBundle;
 import bndtools.model.repo.RepositoryBundleVersion;
 import bndtools.model.repo.RepositoryTreeContentProvider;
+import bndtools.model.repo.RepositoryUtils;
 import bndtools.model.repo.WrappingObrRepository;
 import bndtools.utils.SelectionDragAdapter;
 import bndtools.views.RepositoryBsnFilter;
@@ -64,6 +67,7 @@ public class RepositorySelectionPart extends BndEditorPart {
 
     private final Image projectImg = PlatformUI.getWorkbench().getSharedImages().getImage(IDE.SharedImages.IMG_OBJ_PROJECT);
     private final Image repoImg = PlatformUI.getWorkbench().getSharedImages().getImage(ISharedImages.IMG_OBJ_FOLDER);
+    private final Image nonObrRepoImg = AbstractUIPlugin.imageDescriptorFromPlugin(Plugin.PLUGIN_ID, "icons/warning_obj.gif").createImage();
 
     private Text txtSearch;
     private TreeViewer viewer;
@@ -136,6 +140,7 @@ public class RepositorySelectionPart extends BndEditorPart {
         viewer.setContentProvider(new RepositoryTreeContentProvider());
 
         final Color enabledColor = section.getDisplay().getSystemColor(SWT.COLOR_BLACK);
+        final Color enabledVersionColor = JFaceResources.getColorRegistry().get(JFacePreferences.COUNTER_COLOR);
         final Color disabledColor = section.getDisplay().getSystemColor(SWT.COLOR_GRAY);
 
         TreeColumn colSelected = new TreeColumn(tree, SWT.CENTER);
@@ -149,9 +154,6 @@ public class RepositorySelectionPart extends BndEditorPart {
         colName.setMoveable(false);
         colName.setResizable(true);
 
-//        treeLayout.setColumnData(colSelected, new ColumnPixelData(20, true));
-//        treeLayout.setColumnData(colName, new ColumnWeightData(85, true));
-
         viewer.setLabelProvider(new StyledCellLabelProvider() {
             @Override
             public void update(ViewerCell cell) {
@@ -164,19 +166,28 @@ public class RepositorySelectionPart extends BndEditorPart {
 
                 if (element instanceof RepositoryPlugin) {
                     RepositoryPlugin repo = (RepositoryPlugin) element;
-                    boolean included = isIncludedRepo(repo);
-                    if (column == 1) {
-                        label = repo.getName();
 
-                        image = repoImg;
-                        if (repo instanceof WrappingObrRepository) {
-                            if (((WrappingObrRepository) repo).getDelegate() instanceof WorkspaceObrProvider)
-                                image = projectImg;
+                    if (repo instanceof OBRIndexProvider) {
+                        boolean included = isIncludedRepo(repo);
+                        if (column == 1) {
+                            label = repo.getName();
+                            image = repoImg;
+                            if (repo instanceof WrappingObrRepository) {
+                                if (((WrappingObrRepository) repo).getDelegate() instanceof WorkspaceObrProvider)
+                                    image = projectImg;
+                            }
+                        } else if (column == 0) {
+                            image = included ? checkedImg : uncheckedImg;
                         }
-                    } else if (column == 0) {
-                        image = included ? checkedImg : uncheckedImg;
+                        foreground = included ? enabledColor : disabledColor;
+                    } else {
+                        foreground = disabledColor;
+                        if (column == 0) image = nonObrRepoImg;
+                        else if (column == 1) {
+                            image = repoImg;
+                            label = repo.getName();
+                        }
                     }
-                    foreground = included ? enabledColor : disabledColor;
                 } else if (element instanceof RepositoryBundle) {
                     RepositoryBundle bundle = (RepositoryBundle) element;
                     RepositoryPlugin repo = bundle.getRepo();
@@ -191,7 +202,7 @@ public class RepositorySelectionPart extends BndEditorPart {
                     RepositoryPlugin repo = bundleVersion.getBundle().getRepo();
                     if (column == 1)
                         label = bundleVersion.getVersion().toString();
-                    foreground = isIncludedRepo(repo) ? enabledColor : disabledColor;
+                    foreground = isIncludedRepo(repo) ? enabledVersionColor : disabledColor;
                 } else {
                     label = element.toString();
                 }
@@ -199,6 +210,22 @@ public class RepositorySelectionPart extends BndEditorPart {
                 cell.setText(label);
                 cell.setImage(image);
                 cell.setForeground(foreground);
+            }
+
+            @Override
+            public String getToolTipText(Object element) {
+                String tooltip = null;
+                if (element instanceof RepositoryPlugin) {
+                    if (element instanceof OBRIndexProvider) {
+                        if (isIncludedRepo((RepositoryPlugin) element))
+                            tooltip = "Included in OBR resolution.";
+                        else
+                            tooltip = "Excluded from OBR resolution.";
+                    } else {
+                        tooltip = "Not an OBR repository, cannot be used for OBR resolution.";
+                    }
+                }
+                return tooltip;
             }
         });
 
@@ -220,10 +247,15 @@ public class RepositorySelectionPart extends BndEditorPart {
                     event.doit = false;
                 else {
                     for (Object element : selection.toList()) {
-                        if (!(element instanceof RepositoryBundle || element instanceof RepositoryBundleVersion)) {
+                        if (element instanceof RepositoryBundle)
+                            event.doit = isIncludedRepo(((RepositoryBundle) element).getRepo());
+                        else if (element instanceof RepositoryBundleVersion)
+                            event.doit = isIncludedRepo(((RepositoryBundleVersion) element).getBundle().getRepo());
+                        else
                             event.doit = false;
+
+                        if (!event.doit)
                             break;
-                        }
                     }
                 }
 
@@ -233,6 +265,8 @@ public class RepositorySelectionPart extends BndEditorPart {
                 }
             }
         });
+
+        ColumnViewerToolTipSupport.enableFor(viewer, ToolTip.NO_RECREATE);
 
         reloadRepos();
     }
@@ -247,10 +281,24 @@ public class RepositorySelectionPart extends BndEditorPart {
     }
 
     boolean isIncludedRepo(RepositoryPlugin repo) {
-        return includedRepos == null || includedRepos.contains(repo.getName());
+        boolean included = false;
+        if (repo instanceof OBRIndexProvider) {
+            OBRIndexProvider obrProvider = (OBRIndexProvider) repo;
+            included = obrProvider.getSupportedModes().contains(OBRResolutionMode.runtime) && (includedRepos == null || includedRepos.contains(repo.getName()));
+        }
+        return included;
     }
 
     void toggleSelection(RepositoryPlugin selectedRepo) {
+        if (!(selectedRepo instanceof OBRIndexProvider)) {
+            return;
+        }
+
+        OBRIndexProvider obrProvider = (OBRIndexProvider) selectedRepo;
+        if (!obrProvider.getSupportedModes().contains(OBRResolutionMode.runtime)) {
+            return;
+        }
+
         if (includedRepos == null) {
             includedRepos = new LinkedHashSet<String>();
 
@@ -268,32 +316,20 @@ public class RepositorySelectionPart extends BndEditorPart {
 
     private void reloadRepos() {
         allRepos.clear();
-        try {
-            Workspace workspace = Central.getWorkspace();
-
-            List<OBRIndexProvider> repos = workspace.getPlugins(OBRIndexProvider.class);
-            allRepos.ensureCapacity(repos.size());
-
-            for (OBRIndexProvider repo : repos) {
-                if (repo.getSupportedModes().contains(OBRResolutionMode.runtime)) {
-                    if (repo instanceof RepositoryPlugin)
-                        allRepos.add((RepositoryPlugin) repo);
-                    else {
-                        WrappingObrRepository wrappingRepo = new WrappingObrRepository(repo, null, workspace);
-                        allRepos.add(wrappingRepo);
-                    }
-                }
-            }
-        } catch (Exception e) {
-            Plugin.logError("Error getting repository list from workspace", e);
-        }
-
+        allRepos.addAll(RepositoryUtils.listRepositories(true));
         viewer.setInput(allRepos);
     }
 
     private void fillToolBar(ToolBar toolbar) {
         ToolItem refreshTool = new ToolItem(toolbar, SWT.PUSH);
         refreshTool.setImage(refreshImg);
+
+        refreshTool.addSelectionListener(new SelectionAdapter() {
+            @Override
+            public void widgetSelected(SelectionEvent e) {
+                reloadRepos();
+            }
+        });
     }
 
     @Override
@@ -319,6 +355,7 @@ public class RepositorySelectionPart extends BndEditorPart {
         refreshImg.dispose();
         bundleImg.dispose();
         checkedImg.dispose();
+        nonObrRepoImg.dispose();
     }
 
 }

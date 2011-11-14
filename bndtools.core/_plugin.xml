@@ -6,6 +6,10 @@
       name="Workspace Configuration Templates"
       schema="schema/cnfTemplates.exsd"
    />
+   <extension-point id="launchTemplates"
+      name="Launch Templates"
+      schema="schema/launchTemplates.exsd"
+   />
    <extension-point id="projectTemplates"
       name="Project Templates"
       schema="schema/projectTemplates.exsd"
@@ -462,6 +466,53 @@
    <!-- LAUNCH SHORTCUTS -->
 	   <extension
          point="org.eclipse.debug.ui.launchShortcuts">
+      <shortcut
+            label="OSGi JUnit Test"
+            icon="icons/bricks_junit.png"
+            class="bndtools.launch.JUnitShortcut"
+            modes="run, debug"
+            id="bndtools.launch.junitShortcut">
+         <contextualLaunch>
+            <enablement>
+               <with variable="selection">
+                  <count value="1"/>
+                  <iterate>
+                     <or>
+                        <!-- Java/Bnd Project -->
+                        <and>
+                           <test property="org.eclipse.jdt.launching.isContainer"/>
+                           <test property="org.eclipse.jdt.launching.hasProjectNature" args="org.eclipse.jdt.core.javanature"/>
+                           <test property="org.eclipse.jdt.launching.hasProjectNature" args="bndtools.core.bndnature"/>
+                        </and>
+
+                        <!--  Java element (src-folder, package or JUnit class) -->
+                        <adapt type="org.eclipse.jdt.core.IJavaElement">
+                           <test property="org.eclipse.jdt.core.hasTypeOnClasspath" value="junit.framework.Test" />
+                           <test property="org.eclipse.jdt.junit.canLaunchAsJUnit" forcePluginActivation="true" />
+                           <test property="org.bndtools.core.isInBndJavaProject" forcePluginActivation="true" />
+                        </adapt>
+                        
+                        <!-- bnd.bnd or *.bndrun file -->
+                        <test property="org.eclipse.core.resources.name" value="bnd.bnd"/>
+                        <test property="org.eclipse.core.resources.extension" value="bndrun"/>
+                        
+                     </or>
+                  </iterate>
+               </with>
+            </enablement>
+         </contextualLaunch>
+         <configurationType
+               id="org.eclipse.jdt.junit.launchconfig">
+         </configurationType>
+         <description
+               description="Debug a JUnit Test in an OSGi Framework"
+               mode="debug">
+         </description>
+         <description
+               description="Run an OSGi JUnit Test in an OSGi framework"
+               mode="run">
+         </description>
+      </shortcut>
       
       <shortcut
             class="bndtools.launch.RunShortcut"
@@ -493,39 +544,7 @@
             </enablement>
          </contextualLaunch>
       </shortcut>
-      
-      <shortcut
-            label="OSGi JUnit Test"
-            icon="icons/bricks_junit.png"
-            class="bndtools.launch.JUnitShortcut"
-            modes="run, debug"
-            id="bndtools.launch.junitClassShortcut">
-         <contextualLaunch>
-            <enablement>
-               <with variable="selection">
-                  <count value="1"/>
-                  <iterate>
-                     <adapt type="org.eclipse.jdt.core.IJavaElement">
-                        <test property="org.eclipse.jdt.core.hasTypeOnClasspath" value="junit.framework.Test" />
-                        <test property="org.eclipse.jdt.junit.canLaunchAsJUnit" forcePluginActivation="true" />
-                        <test property="org.bndtools.core.isInBndJavaProject" forcePluginActivation="true" />
-                     </adapt>
-                  </iterate>
-               </with>
-            </enablement>
-         </contextualLaunch>
-         <configurationType
-               id="org.eclipse.jdt.junit.launchconfig">
-         </configurationType>
-         <description
-               description="Debug a JUnit Test in an OSGi Framework"
-               mode="debug">
-         </description>
-         <description
-               description="Run an OSGi JUnit Test in an OSGi framework"
-               mode="run">
-         </description>
-      </shortcut>
+
    </extension>
    
     <extension
@@ -574,6 +593,34 @@
          priority="-2147483648"
          class="bndtools.api.EmptyTemplate"
          doc="html/emptyTemplate.html"/>
+   </extension>
+   
+   <extension point="bndtools.core.launchTemplates">
+      <template
+         name="Apache Felix 4 with Shell"
+         path="launchTemplates/felix4+shell.bndrun"
+         doc="html/felix4+shell.form.xml"
+         icon="icons/felix.gif"/>
+      <template
+         name="Apache Felix 4 with Web Console"
+         path="launchTemplates/felix4+webconsole.bndrun"
+         doc="html/felix4+webconsole.form.xml"
+         icon="icons/felix.gif"/>
+      <template
+         name="Apache Felix 4 (Empty)"
+         path="launchTemplates/felix4l.bndrun"
+         doc="html/felix4.form.xml"
+         icon="icons/felix.gif"/>
+      <template
+         name="Eclipse Equinox 3.7 with Console"
+         path="launchTemplates/equinox37+console.bndrun"
+         doc="html/equinox37+console.form.xml"
+         icon="icons/equinox.gif"/>
+      <template
+         name="Knopflerfish 5.1 with Felix Shell"
+         path="launchTemplates/knopflerfish.bndrun"
+         doc="html/knopflerfish.form.xml"
+         icon="icons/knopflerfish_16x16_inverted.gif"/>
    </extension>
    
    <extension point="org.eclipse.ltk.core.refactoring.renameParticipants">
