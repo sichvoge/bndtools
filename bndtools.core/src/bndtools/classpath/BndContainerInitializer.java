@@ -199,6 +199,25 @@ public class BndContainerInitializer extends ClasspathContainerInitializer imple
             containers = Collections.emptyList();
         }
 
+        System.err.println("Containers: ");
+        List<Container> toFilterOut = new ArrayList<Container>(); // FIXME can there be more than 1???
+        String lowestVersion = null;
+        for (Container c : containers) {
+            System.err.println(c.getBundleSymbolicName() + ", version " + c.getVersion() + " = " + c.toString());
+            if ("ee.j2se".equals(c.getBundleSymbolicName())) {
+                toFilterOut.add(c);
+                if ((lowestVersion == null) || (lowestVersion.compareTo(c.getVersion()) > 0)) {
+                    lowestVersion = c.getVersion();
+                }
+            }
+        }
+        if (!toFilterOut.isEmpty()) {
+            containers.removeAll(toFilterOut);
+        }
+        // get all installed eclipse execution environments
+        // FIXME add appropriate JRE, use lowestVersion, or if not found the next higher version with an error in the log
+        // http://publib.boulder.ibm.com/infocenter/rsmhelp/v7r0m0/index.jsp?topic=/org.eclipse.jdt.doc.isv/reference/api/org/eclipse/jdt/launching/JavaRuntime.html
+
         ArrayList<IClasspathEntry> result = new ArrayList<IClasspathEntry>(containers.size());
         LinkedHashMap<Project,List<IAccessRule>> projectAccessRules = new LinkedHashMap<Project,List<IAccessRule>>();
         for (Container c : containers) {
