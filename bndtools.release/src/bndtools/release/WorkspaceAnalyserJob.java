@@ -42,7 +42,7 @@ public class WorkspaceAnalyserJob extends Job {
 	protected final Shell shell;
 
 	public WorkspaceAnalyserJob() {
-		super(Messages.workspaceReleaseJob);
+		super(Messages.workspaceReleaseJob1);
 		this.shell = PlatformUI.getWorkbench().getDisplay().getActiveShell();
 		setUser(true);
 	}

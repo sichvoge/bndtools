@@ -58,7 +58,7 @@ public class ReleaseJob  extends Job {
 			}
 			if (ok) {
 				StringBuilder sb = new StringBuilder();
-				sb.append(Messages.project);
+				sb.append(Messages.project1);
 				sb.append(" : ");
 				sb.append(context.getProject().getName());
 				sb.append("\n\n");
